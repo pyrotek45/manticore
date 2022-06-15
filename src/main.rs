@@ -1522,7 +1522,7 @@ fn main() {
                 .value_name("DEBUG")
                 .long("debug")
                 .takes_value(false)
-                .short("d")
+                .short('d')
                 .help("displays debug information"),
         )
         .get_matches();
@@ -1562,6 +1562,7 @@ fn main() {
                     let mut lexer = Lexer::new_from_string(&line);
                     lexer.parse();
                     parser.clear();
+                    if line.to_lowercase() == "exit" {break};
                     if line == "debugmode" {
                         parser.debug = !parser.debug;
                         println!("DEBUGMODE {}", parser.debug);
