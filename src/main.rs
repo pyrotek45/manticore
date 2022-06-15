@@ -12,14 +12,14 @@ use std::vec;
 
 #[derive(Debug, Clone, Copy, std::cmp::PartialEq)]
 enum TokenTypes {
-    TBlock,
-    TFunction,
-    TIdentifier,
-    TNumber,
-    TString,
-    TSymbol,
-    TNewLine,
-    TBool,
+    Block,
+    Function,
+    Identifier,
+    Number,
+    String,
+    Symbol,
+    NewLine,
+    Bool,
 }
 
 #[derive(Clone)]
@@ -189,7 +189,7 @@ impl Lexer {
     }
     #[allow(dead_code)]
     fn add_input(&mut self, input: &str) {
-        self.source.push_str(&input.to_string())
+        self.source.push_str(input)
     }
     #[allow(dead_code)]
     fn clear_lexer(&mut self) {
@@ -200,7 +200,7 @@ impl Lexer {
         if !self.buffer.is_empty() {
             if is_string_number(&self.buffer) {
                 return Some(Token {
-                    token_type: TokenTypes::TNumber,
+                    token_type: TokenTypes::Number,
                     value: self.buffer.clone(),
                     line_number: self.line_number,
                     row: self.row - self.buffer.len(),
@@ -210,7 +210,7 @@ impl Lexer {
                 //special identifiers
                 if self.function_keywords.contains(&self.buffer) {
                     return Some(Token {
-                        token_type: TokenTypes::TFunction,
+                        token_type: TokenTypes::Function,
                         value: self.buffer.clone(),
                         line_number: self.line_number,
                         row: self.row - self.buffer.len(),
@@ -219,7 +219,7 @@ impl Lexer {
                 }
                 if self.bool_keywords.contains(&self.buffer) {
                     return Some(Token {
-                        token_type: TokenTypes::TBool,
+                        token_type: TokenTypes::Bool,
                         value: self.buffer.clone(),
                         line_number: self.line_number,
                         row: self.row - self.buffer.len(),
@@ -227,7 +227,7 @@ impl Lexer {
                     });
                 }
                 return Some(Token {
-                    token_type: TokenTypes::TIdentifier,
+                    token_type: TokenTypes::Identifier,
                     value: self.buffer.clone(),
                     line_number: self.line_number,
                     row: self.row - self.buffer.len(),
@@ -249,7 +249,7 @@ impl Lexer {
                     self.is_parsing_stringdq = false;
                     if let Some(vec_last) = self.block_stack.last_mut() {
                         vec_last.push(Token {
-                            token_type: TokenTypes::TString,
+                            token_type: TokenTypes::String,
                             value: self.buffer.clone(),
                             line_number: self.line_number,
                             row: self.row,
@@ -270,7 +270,7 @@ impl Lexer {
                     self.is_parsing_stringsq = false;
                     if let Some(vec_last) = self.block_stack.last_mut() {
                         vec_last.push(Token {
-                            token_type: TokenTypes::TString,
+                            token_type: TokenTypes::String,
                             value: self.buffer.clone(),
                             line_number: self.line_number,
                             row: self.row,
@@ -303,7 +303,7 @@ impl Lexer {
 
                     if let Some(vec_last) = self.block_stack.last_mut() {
                         vec_last.push(Token {
-                            token_type: TokenTypes::TNewLine,
+                            token_type: TokenTypes::NewLine,
                             value: "newline".to_string(),
                             line_number: self.line_number,
                             row: self.row,
@@ -348,7 +348,7 @@ impl Lexer {
 
                     if let Some(vec_last) = self.block_stack.last_mut() {
                         vec_last.push(Token {
-                            token_type: TokenTypes::TSymbol,
+                            token_type: TokenTypes::Symbol,
                             value: c.to_string(),
                             line_number: self.line_number,
                             row: self.row,
@@ -396,7 +396,7 @@ impl Lexer {
                     if let Some(list) = self.block_stack.pop() {
                         if let Some(vec_last) = self.block_stack.last_mut() {
                             vec_last.push(Token {
-                                token_type: TokenTypes::TBlock,
+                                token_type: TokenTypes::Block,
                                 value: "block".to_string(),
                                 line_number: self.line_number,
                                 row: self.row,
@@ -449,26 +449,26 @@ impl ManitcoreVm {
 
     fn execute(&mut self) {
         for i in &self.instruction_tokens {
-            if i.token_type == TokenTypes::TString {
+            if i.token_type == TokenTypes::String {
                 self.execution_stack.push(i.clone());
                 continue;
             }
 
-            if i.token_type == TokenTypes::TBlock {
+            if i.token_type == TokenTypes::Block {
                 self.execution_stack.push(i.clone());
                 continue;
             }
 
-            if i.token_type == TokenTypes::TNumber {
+            if i.token_type == TokenTypes::Number {
                 self.execution_stack.push(i.clone());
                 continue;
             }
-            if i.token_type == TokenTypes::TBool {
+            if i.token_type == TokenTypes::Bool {
                 self.execution_stack.push(i.clone());
                 continue;
             }
 
-            if i.token_type == TokenTypes::TIdentifier {
+            if i.token_type == TokenTypes::Identifier {
                 self.execution_stack.push(i.clone());
                 continue;
             }
@@ -485,7 +485,7 @@ impl ManitcoreVm {
                 "set" => {
                     let mut variable_stack: Vec<String> = Vec::new();
                     while let Some(k) = self.execution_stack.last() {
-                        if k.token_type == TokenTypes::TIdentifier {
+                        if k.token_type == TokenTypes::Identifier {
                             if let Some(tok) = self.execution_stack.pop() {
                                 variable_stack.push(tok.value.clone());
                             }
@@ -607,7 +607,7 @@ impl ManitcoreVm {
                     if let Some(a) = self.execution_stack.pop() {
                         if let Some(b) = self.execution_stack.pop() {
                             //if true single if statement
-                            if b.token_type == TokenTypes::TBool {
+                            if b.token_type == TokenTypes::Bool {
                                 if b.value == "true" {
                                     let mut parser = Parser::new();
                                     if self.debug {
@@ -623,7 +623,7 @@ impl ManitcoreVm {
                                     self.heap = vm.heap.clone();
                                 }
                             } else if let Some(c) = self.execution_stack.pop() {
-                                if c.token_type == TokenTypes::TBool {
+                                if c.token_type == TokenTypes::Bool {
                                     if c.value == "true" {
                                         let mut parser = Parser::new();
                                         if self.debug {
@@ -755,7 +755,7 @@ impl ManitcoreVm {
                         }
 
                         self.execution_stack.push(Token {
-                            token_type: TokenTypes::TBool,
+                            token_type: TokenTypes::Bool,
                             value: (f == s).to_string(),
                             line_number: 0,
                             row: 0,
@@ -831,7 +831,7 @@ impl ManitcoreVm {
                         }
 
                         self.execution_stack.push(Token {
-                            token_type: TokenTypes::TNumber,
+                            token_type: TokenTypes::Number,
                             value: (f + s).to_string(),
                             line_number: 0,
                             row: 0,
@@ -907,7 +907,7 @@ impl ManitcoreVm {
                         }
 
                         self.execution_stack.push(Token {
-                            token_type: TokenTypes::TNumber,
+                            token_type: TokenTypes::Number,
                             value: (s - f).to_string(),
                             line_number: 0,
                             row: 0,
@@ -983,7 +983,7 @@ impl ManitcoreVm {
                         }
 
                         self.execution_stack.push(Token {
-                            token_type: TokenTypes::TNumber,
+                            token_type: TokenTypes::Number,
                             value: (f * s).to_string(),
                             line_number: 0,
                             row: 0,
@@ -1059,7 +1059,7 @@ impl ManitcoreVm {
                         }
 
                         self.execution_stack.push(Token {
-                            token_type: TokenTypes::TNumber,
+                            token_type: TokenTypes::Number,
                             value: (s / f).to_string(),
                             line_number: 0,
                             row: 0,
@@ -1135,7 +1135,7 @@ impl ManitcoreVm {
                         }
 
                         self.execution_stack.push(Token {
-                            token_type: TokenTypes::TNumber,
+                            token_type: TokenTypes::Number,
                             value: s + &f,
                             line_number: 0,
                             row: 0,
@@ -1337,10 +1337,10 @@ impl Parser {
 
     fn shunt(&mut self, input: &[Token]) -> &Vec<Token> {
         for token in input {
-            if token.token_type == TokenTypes::TNumber {
+            if token.token_type == TokenTypes::Number {
                 self.output_stack.push(token.clone());
             }
-            if token.token_type == TokenTypes::TBlock {
+            if token.token_type == TokenTypes::Block {
                 self.output_stack.push(token.clone());
                 if let Some(t) = self.operator_stack.last() {
                     if t.value == "@" {
@@ -1357,17 +1357,17 @@ impl Parser {
                     }
                 }
             }
-            if token.token_type == TokenTypes::TString {
+            if token.token_type == TokenTypes::String {
                 self.output_stack.push(token.clone());
             }
-            if token.token_type == TokenTypes::TBool {
+            if token.token_type == TokenTypes::Bool {
                 self.output_stack.push(token.clone());
             }
-            if token.token_type == TokenTypes::TFunction {
+            if token.token_type == TokenTypes::Function{
                 self.operator_stack.push(token.clone());
             }
             //consider using a flag or option for repl
-            if token.token_type == TokenTypes::TIdentifier {
+            if token.token_type == TokenTypes::Identifier {
                 if token.value.as_str() == "debug" {
                     self.debug = true;
                     continue;
@@ -1375,14 +1375,14 @@ impl Parser {
                 self.operator_stack.push(token.clone());
             }
 
-            if token.token_type == TokenTypes::TSymbol {
+            if token.token_type == TokenTypes::Symbol {
                 match token.value.as_str() {
                     "," => {
                         if let Some(t) = self.operator_stack.last() {
                             if t.value == "(" {
                                 if let Some(temp) = self.operator_stack.pop() {
                                     if let Some(f) = self.operator_stack.last() {
-                                        if f.token_type == TokenTypes::TFunction {
+                                        if f.token_type == TokenTypes::Function {
                                             self.output_stack
                                                 .push(self.operator_stack.last().unwrap().clone())
                                         }
@@ -1412,7 +1412,7 @@ impl Parser {
 
                             if !self.operator_stack.is_empty()
                                 && self.operator_stack.last().unwrap().token_type
-                                    == TokenTypes::TFunction
+                                    == TokenTypes::Function
                             {
                                 if let Some(t) = self.operator_stack.pop() {
                                     self.output_stack.push(t.clone())
@@ -1421,14 +1421,14 @@ impl Parser {
 
                             if !self.operator_stack.is_empty()
                                 && self.operator_stack.last().unwrap().token_type
-                                    == TokenTypes::TIdentifier
+                                    == TokenTypes::Identifier
                             {
                                 if let Some(t) = self.operator_stack.pop() {
                                     self.output_stack.push(t.clone())
                                 }
 
                                 self.output_stack.push(Token {
-                                    token_type: TokenTypes::TSymbol,
+                                    token_type: TokenTypes::Symbol,
                                     value: "@".to_string(),
                                     line_number: 0,
                                     row: 0,
