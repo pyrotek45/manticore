@@ -10,44 +10,9 @@ use rustyline::Editor;
 use std::collections::HashMap;
 use std::vec;
 
-#[derive(Debug, Clone, Copy, std::cmp::PartialEq)]
-enum TokenTypes {
-    Block,
-    Function,
-    Identifier,
-    Number,
-    String,
-    Symbol,
-    NewLine,
-    Bool,
-}
+mod token;
+use token::{Token,TokenTypes};
 
-#[derive(Clone)]
-struct Token {
-    token_type: TokenTypes,
-    value: String,
-    line_number: usize,
-    row: usize,
-    block: Vec<Token>,
-}
-
-impl Token {
-    fn precedence(&self) -> usize {
-        match self.value.chars().next() {
-            Some('+') | Some('-') => 4,
-            Some('*') | Some('/') => 5,
-            _ => 0,
-        }
-    }
-
-    fn is_left_associative(&self) -> bool {
-        match self.value.chars().next() {
-            Some('+') | Some('-') => true,
-            Some('*') | Some('/') => true,
-            _ => true,
-        }
-    }
-}
 fn print_error(er: &str, line: usize, r: usize, file: &str, last: &str) {
     println!(
         "{}: on line {}, {}",
