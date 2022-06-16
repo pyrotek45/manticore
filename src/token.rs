@@ -12,11 +12,14 @@ pub enum TokenTypes {
 
 #[derive(Clone)]
 pub struct Token {
+    // Used for actual work
     pub token_type: TokenTypes,
     pub value: String,
+    pub block: Vec<Token>,
+
+    // Used for debuging
     pub line_number: usize,
     pub row: usize,
-    pub block: Vec<Token>,
 }
 
 impl Token {

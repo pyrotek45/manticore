@@ -1,0 +1,20 @@
+var(x:18)
+
+if (
+    (x: = 9)
+    {
+        var(x:20)
+    }
+    {
+        var(x:10)
+    }
+)
+
+println(x:)
+
+var(func: {println("waow")})
+
+@(func)
+
+var(func2: {println("dont hurt me")})
+
