@@ -35,7 +35,15 @@ impl ManitcoreVm {
             if i.token_type == TokenTypes::Identifier {
                 if let Some(tok) = self.heap.get(&i.value) {
                     //println!("replaced {} with {}", i.value, tok.value);
-                    self.execution_stack.push(tok.clone());
+                    self.execution_stack.push(Token {
+                        token_type: TokenTypes::Knot,
+                        value: tok.value.clone(),
+                        line_number: 0,
+                        row: 0,
+                        block: vec![],
+                        proxy: tok.proxy.clone(),
+                    }
+                    );
                     continue;
                 }
                 self.execution_stack.push(i.clone());
@@ -65,6 +73,7 @@ impl ManitcoreVm {
 
             //Match values
             match i.value.to_lowercase().as_str() {
+                // If left paren is found then one must be missing the other pair
                 "(" => print_error(
                     "Possibly missing ')' pair",
                     i.line_number,
@@ -72,8 +81,12 @@ impl ManitcoreVm {
                     &self.file,
                     &self.last_instruction,
                 ),
+
+                // Used to tie more than 1 token at a time from the stack
                 "set" => {
                     let mut variable_stack: Vec<String> = Vec::new();
+
+                    // Pop from stack untill no more identifiers
                     while let Some(k) = self.execution_stack.last() {
                         if k.token_type == TokenTypes::Identifier {
                             if let Some(tok) = self.execution_stack.pop() {
@@ -83,9 +96,13 @@ impl ManitcoreVm {
                             break;
                         }
                     }
+
+                    // Tie each value into the heap using the tokens poped
+
                     for values in variable_stack {
-                        if let Some(tok) = self.execution_stack.pop() {
-                            self.heap.insert(values.clone(), tok.clone());
+                        if let Some(mut tok) = self.execution_stack.pop() {
+                            tok.proxy = Some(values.clone());
+                            self.heap.insert(values, tok.clone());
                         } else {
                             print_error(
                                 "not enough arguments for set",

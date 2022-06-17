@@ -8,6 +8,7 @@ pub enum TokenTypes {
     Symbol,
     NewLine,
     Bool,
+    Knot,
 }
 
 #[derive(Clone)]
