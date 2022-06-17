@@ -1,4 +1,20 @@
+# This line is a comment
+# To create a hello world program
+
+println("hello world")
+
+# or 
+
+print("hello world\n")
+
+# the print will not start a newline (unlike println)so must be added in the string with \n
+
+# the var function takes an identifier and anything and ties the identifier to it on the heap
 var(x:18)
+
+# you must append a colon to an identifier for it to use what it is tied to
+println(x:)
+
 
 if (
     (x: = 9)
@@ -12,9 +28,9 @@ if (
 
 println(x:)
 
-var(func: {println("waow")})
+var(append: {concat() println()})
 
-@(func)
+("hello world, " "this is a hold up!".append)
 
-var(func2: {println("dont hurt me")})
+("hello world, " "so is this!".append)
 

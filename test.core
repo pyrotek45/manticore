@@ -1,0 +1,34 @@
+{
+    tie(x 10) 
+
+    tie(x (x*x*x))
+
+
+    tie(x 10)
+    tie(y 20)
+
+    tie(z (x*y))
+
+    tie(z (z*z))
+
+    tie(z 12)
+
+    tie(z (z*z))
+
+    tie(x 10)
+    tie(z 10)
+    tie(z 20)
+
+    tie(q (z*x*y))
+    tie(name "bing bong")
+    println(name)
+}
+
+
+tie(double_print { reverse: println println})
+
+(clear: "hello " "world" @double_print)
+
+
+tie(name "michael")
+println(name)

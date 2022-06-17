@@ -15,8 +15,25 @@ pub struct Lexer {
     function_keywords: Vec<String>,
     bool_keywords: Vec<String>,
 }
+fn manticore_functions() -> Vec<String> {
+    vec![
+        "print".to_string(),
+        "println".to_string(),
+        "if".to_string(),
+        "call".to_string(),
+        "set".to_string(),
+        "@".to_string(),
+        "dup".to_string(),
+        "concat".to_string(),
+        "tie".to_string(),
+        "exit".to_string(),
+        "reverse".to_string(),
+        "clear".to_string(),
+    ]
+}
 
 impl Lexer {
+    // Creates a lexer using the file as input
     pub fn new_from_file(filename: &str) -> Self {
         if let Ok(content) = std::fs::read_to_string(filename) {
             Lexer {
@@ -27,18 +44,7 @@ impl Lexer {
                 is_parsing_stringdq: false,
                 is_parsing_stringsq: false,
                 block_stack: vec![vec![]],
-                function_keywords: vec![
-                    "print".to_string(),
-                    "println".to_string(),
-                    "if".to_string(),
-                    "call".to_string(),
-                    "set".to_string(),
-                    "@".to_string(),
-                    "dup".to_string(),
-                    "concat".to_string(),
-                    "var".to_string(),
-                    "exit".to_string(),
-                ],
+                function_keywords: manticore_functions(),
                 bool_keywords: vec!["true".to_string(), "false".to_string()],
                 is_parsing_comment: false,
             }
@@ -51,6 +57,7 @@ impl Lexer {
         }
     }
 
+    // Creates a lexer using a string as input
     pub fn new_from_string(input: &str) -> Self {
         Lexer {
             source: input.to_string(),
@@ -60,33 +67,26 @@ impl Lexer {
             is_parsing_stringdq: false,
             is_parsing_stringsq: false,
             block_stack: vec![vec![]],
-            function_keywords: vec![
-                "print".to_string(),
-                "println".to_string(),
-                "if".to_string(),
-                "println".to_string(),
-                "call".to_string(),
-                "set".to_string(),
-                "@".to_string(),
-                "dup".to_string(),
-                "concat".to_string(),
-                "var".to_string(),
-                "exit".to_string(),
-            ],
+            function_keywords: manticore_functions(),
             bool_keywords: vec!["true".to_string(), "false".to_string()],
             is_parsing_comment: false,
         }
     }
 
+    // Currently unused
     pub fn _add_input(&mut self, input: &str) {
         self.source.push_str(input)
     }
 
+    // Currently unused
     pub fn _clear_lexer(&mut self) {
         self.source.clear()
     }
 
+    // This function is used to check to see if the current
+    // buffer is either a (number,function,bool,identifier)
     fn check_token(&self) -> Option<Token> {
+        // Checking if buffer is numerical
         if !self.buffer.is_empty() {
             if is_string_number(&self.buffer) {
                 return Some(Token {
@@ -95,9 +95,10 @@ impl Lexer {
                     line_number: self.line_number,
                     row: self.row - self.buffer.len(),
                     block: vec![],
+                    proxy: None,
                 });
             } else {
-                //special identifiers
+                // Checking if buffer is a function
                 if self.function_keywords.contains(&self.buffer) {
                     return Some(Token {
                         token_type: TokenTypes::Function,
@@ -105,8 +106,10 @@ impl Lexer {
                         line_number: self.line_number,
                         row: self.row - self.buffer.len(),
                         block: vec![],
+                        proxy: None,
                     });
                 }
+                // Checking if buffer is a bool
                 if self.bool_keywords.contains(&self.buffer) {
                     return Some(Token {
                         token_type: TokenTypes::Bool,
@@ -114,22 +117,26 @@ impl Lexer {
                         line_number: self.line_number,
                         row: self.row - self.buffer.len(),
                         block: vec![],
+                        proxy: None,
                     });
                 }
+                // If none of the others, return an identifier
                 return Some(Token {
                     token_type: TokenTypes::Identifier,
                     value: self.buffer.clone(),
                     line_number: self.line_number,
                     row: self.row - self.buffer.len(),
                     block: vec![],
+                    proxy: None,
                 });
             }
         }
         Option::None
     }
 
+    // Going through each char in the file or string
     pub fn parse(&mut self) {
-        // todo add escape key
+        // Parsing strings double quote
         for c in self.source.chars() {
             if self.is_parsing_stringdq {
                 if c != '"' {
@@ -144,6 +151,7 @@ impl Lexer {
                             line_number: self.line_number,
                             row: self.row,
                             block: vec![],
+                            proxy: None,
                         })
                     }
                     self.row += self.buffer.len() + 1;
@@ -152,6 +160,7 @@ impl Lexer {
                 }
             }
 
+            // Parsing strings single quotes
             if self.is_parsing_stringsq {
                 if c != '\'' {
                     self.buffer.push(c);
@@ -165,6 +174,7 @@ impl Lexer {
                             line_number: self.line_number,
                             row: self.row,
                             block: vec![],
+                            proxy: None,
                         })
                     }
                     self.row += self.buffer.len() + 1;
@@ -173,6 +183,7 @@ impl Lexer {
                 }
             }
 
+            // Parsing comments
             if self.is_parsing_comment {
                 if c != '\n' {
                     continue;
@@ -182,7 +193,10 @@ impl Lexer {
                 }
             }
 
+            // Main parsing function going through each char and adding them to a buffer
+            // if no match is found
             match c {
+                // Newline
                 '\n' => {
                     if let Some(t) = self.check_token() {
                         if let Some(vec_last) = self.block_stack.last_mut() {
@@ -198,6 +212,7 @@ impl Lexer {
                             line_number: self.line_number,
                             row: self.row,
                             block: vec![],
+                            proxy: None,
                         })
                     }
 
@@ -205,6 +220,8 @@ impl Lexer {
                     self.row = 0;
                     continue;
                 }
+
+                // Comment
                 '#' => {
                     if let Some(t) = self.check_token() {
                         if let Some(vec_last) = self.block_stack.last_mut() {
@@ -214,10 +231,13 @@ impl Lexer {
                     }
                     self.is_parsing_comment = true;
                 }
+
+                // Letters and numbers
                 'a'..='z' | 'A'..='Z' | '_' | '0'..='9' => {
                     self.buffer.push(c);
                 }
 
+                // Spaces
                 ' ' => {
                     if let Some(t) = self.check_token() {
                         if let Some(vec_last) = self.block_stack.last_mut() {
@@ -227,6 +247,7 @@ impl Lexer {
                     }
                 }
 
+                // Symbols
                 '+' | '-' | '*' | '/' | '(' | ')' | '[' | ']' | '<' | '>' | '`' | '~' | '!'
                 | '@' | '$' | '%' | '^' | '&' | ',' | '?' | ';' | ':' | '=' | '.' => {
                     if let Some(t) = self.check_token() {
@@ -243,10 +264,12 @@ impl Lexer {
                             line_number: self.line_number,
                             row: self.row,
                             block: vec![],
+                            proxy: None,
                         })
                     }
                 }
 
+                // Double quotes (start parsing a string)
                 '"' => {
                     if let Some(t) = self.check_token() {
                         if let Some(vec_last) = self.block_stack.last_mut() {
@@ -256,6 +279,8 @@ impl Lexer {
                     }
                     self.is_parsing_stringdq = true;
                 }
+
+                // Single quotes (starts parsing a string)
                 '\'' => {
                     if let Some(t) = self.check_token() {
                         if let Some(vec_last) = self.block_stack.last_mut() {
@@ -265,6 +290,8 @@ impl Lexer {
                     }
                     self.is_parsing_stringsq = true;
                 }
+
+                // Parsing blocks
                 '{' => {
                     if let Some(t) = self.check_token() {
                         if let Some(vec_last) = self.block_stack.last_mut() {
@@ -275,6 +302,7 @@ impl Lexer {
 
                     self.block_stack.push(vec![]);
                 }
+
                 '}' => {
                     if let Some(t) = self.check_token() {
                         if let Some(vec_last) = self.block_stack.last_mut() {
@@ -291,6 +319,7 @@ impl Lexer {
                                 line_number: self.line_number,
                                 row: self.row,
                                 block: list,
+                                proxy: None,
                             })
                         }
                     }
@@ -300,18 +329,12 @@ impl Lexer {
             self.row += 1;
         }
 
+        // Add char to the buffer
         if let Some(t) = self.check_token() {
             if let Some(vec_last) = self.block_stack.last_mut() {
                 vec_last.push(t)
             }
             self.buffer.clear();
         };
-
-        // for t in &self.block_stack[0] {
-        //     println!(
-        //         "token type: {:?} token value: {1} token line number: {2} ",
-        //         t.token_type, t.value, t.line_number
-        //     )
-        // }
     }
 }

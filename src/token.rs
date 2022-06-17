@@ -13,6 +13,7 @@ pub enum TokenTypes {
 #[derive(Clone)]
 pub struct Token {
     // Used for actual work
+    pub proxy: Option<String>,
     pub token_type: TokenTypes,
     pub value: String,
     pub block: Vec<Token>,

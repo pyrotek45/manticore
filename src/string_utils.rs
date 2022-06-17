@@ -43,7 +43,7 @@ pub fn print_error(er: &str, line: usize, r: usize, file: &str, last: &str) {
             linenumber += 1;
             if linenumber == line {
                 if let Ok(ip) = l {
-                    println!("  {}  | {}", ip.bright_blue(), line);
+                    println!("  {}  ", ip.bright_blue());
                     for _n in 0..r {
                         print!(" ");
                     }

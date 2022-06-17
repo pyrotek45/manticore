@@ -27,8 +27,23 @@ impl ManitcoreVm {
         }
     }
 
+    // Proccess each token
     pub fn execute(&mut self) {
         for i in &self.instruction_tokens {
+            // If token is an identifier and its value is found on the heap
+            // push the heap value instead
+            if i.token_type == TokenTypes::Identifier {
+                if let Some(tok) = self.heap.get(&i.value) {
+                    //println!("replaced {} with {}", i.value, tok.value);
+                    self.execution_stack.push(tok.clone());
+                    continue;
+                }
+                self.execution_stack.push(i.clone());
+                continue;
+            }
+
+            // Strings , blocks, numbers and bools get pushed
+            // onto the execution stack automatically
             if i.token_type == TokenTypes::String {
                 self.execution_stack.push(i.clone());
                 continue;
@@ -44,11 +59,6 @@ impl ManitcoreVm {
                 continue;
             }
             if i.token_type == TokenTypes::Bool {
-                self.execution_stack.push(i.clone());
-                continue;
-            }
-
-            if i.token_type == TokenTypes::Identifier {
                 self.execution_stack.push(i.clone());
                 continue;
             }
@@ -260,14 +270,36 @@ impl ManitcoreVm {
                         )
                     };
                 }
-                "var" => {
-                    if let (Some(a), Some(b)) =
+                "clear" => {
+                    self.execution_stack.clear();
+                }
+                "reverse" => {
+                    self.execution_stack.reverse();
+                }
+                "tie" => {
+                    if let (Some(mut a), Some(b)) =
                         (self.execution_stack.pop(), self.execution_stack.pop())
                     {
-                        self.heap.insert(b.value, a.clone());
+                        if b.token_type == TokenTypes::Identifier || b.proxy.is_some() {
+                            if let Some(p) = b.proxy {
+                                a.proxy = Some(p.clone());
+                                self.heap.insert(p, a.clone());
+                            } else {
+                                a.proxy = Some(b.value.clone());
+                                self.heap.insert(b.value, a.clone());
+                            }
+                        } else {
+                            print_error(
+                                "expected an identifier",
+                                i.line_number,
+                                i.row,
+                                &self.file,
+                                &self.last_instruction,
+                            )
+                        }
                     } else {
                         print_error(
-                            "not enough arguments for =",
+                            "not enough arguments for var",
                             i.line_number,
                             i.row,
                             &self.file,
@@ -340,6 +372,7 @@ impl ManitcoreVm {
                             line_number: 0,
                             row: 0,
                             block: vec![],
+                            proxy: None,
                         })
                     } else {
                         print_error(
@@ -358,19 +391,17 @@ impl ManitcoreVm {
                         let mut f: f32 = 0.0;
                         let mut s: f32 = 0.0;
 
-                        if self.heap.contains_key(&a.value) {
-                            if let Some(tok) = self.heap.get(&a.value) {
-                                if let Ok(v) = tok.value.parse() {
-                                    f = v
-                                } else {
-                                    print_error(
-                                        "expected a number from variable",
-                                        i.line_number,
-                                        i.row,
-                                        &self.file,
-                                        &self.last_instruction,
-                                    )
-                                }
+                        if let Some(tok) = self.heap.get(&a.value) {
+                            if let Ok(v) = tok.value.parse() {
+                                f = v
+                            } else {
+                                print_error(
+                                    "expected a number from variable",
+                                    i.line_number,
+                                    i.row,
+                                    &self.file,
+                                    &self.last_instruction,
+                                )
                             }
                         } else if let Ok(v) = a.value.parse() {
                             f = v
@@ -416,6 +447,7 @@ impl ManitcoreVm {
                             line_number: 0,
                             row: 0,
                             block: vec![],
+                            proxy: None,
                         })
                     } else {
                         print_error(
@@ -492,6 +524,7 @@ impl ManitcoreVm {
                             line_number: 0,
                             row: 0,
                             block: vec![],
+                            proxy: None,
                         })
                     } else {
                         print_error(
@@ -510,21 +543,7 @@ impl ManitcoreVm {
                         let mut f: f32 = 0.0;
                         let mut s: f32 = 0.0;
 
-                        if self.heap.contains_key(&a.value) {
-                            if let Some(tok) = self.heap.get(&a.value) {
-                                if let Ok(v) = tok.value.parse() {
-                                    f = v
-                                } else {
-                                    print_error(
-                                        "expected a number from variable",
-                                        i.line_number,
-                                        i.row,
-                                        &self.file,
-                                        &self.last_instruction,
-                                    )
-                                }
-                            }
-                        } else if let Ok(v) = a.value.parse() {
+                        if let Ok(v) = a.value.parse() {
                             f = v
                         } else {
                             print_error(
@@ -533,24 +552,11 @@ impl ManitcoreVm {
                                 i.row,
                                 &self.file,
                                 &self.last_instruction,
-                            )
+                            );
+                            println!("{}", a.value)
                         }
 
-                        if self.heap.contains_key(&b.value) {
-                            if let Some(tok) = self.heap.get(&b.value) {
-                                if let Ok(v) = tok.value.parse() {
-                                    s = v
-                                } else {
-                                    print_error(
-                                        "expected a number from variable",
-                                        i.line_number,
-                                        i.row,
-                                        &self.file,
-                                        &self.last_instruction,
-                                    )
-                                }
-                            }
-                        } else if let Ok(v) = b.value.parse() {
+                        if let Ok(v) = b.value.parse() {
                             s = v
                         } else {
                             print_error(
@@ -568,6 +574,7 @@ impl ManitcoreVm {
                             line_number: 0,
                             row: 0,
                             block: vec![],
+                            proxy: None,
                         })
                     } else {
                         print_error(
@@ -644,6 +651,7 @@ impl ManitcoreVm {
                             line_number: 0,
                             row: 0,
                             block: vec![],
+                            proxy: None,
                         })
                     } else {
                         print_error(
@@ -720,6 +728,7 @@ impl ManitcoreVm {
                             line_number: 0,
                             row: 0,
                             block: vec![],
+                            proxy: None,
                         })
                     } else {
                         print_error(
@@ -887,7 +896,11 @@ impl ManitcoreVm {
         }
         if self.debug {
             for (k, v) in &self.heap {
-                println!("{} -> {} ", k, v.value)
+                if let Some(p) = &v.proxy {
+                    println!("{} -> ({} ~ {})", k, v.value, &p)
+                } else {
+                    println!("{} -> ({} ~ None)", k, v.value)
+                }
             }
         }
     }

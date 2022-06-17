@@ -1,3 +1,5 @@
+//use std::collections::HashMap;
+
 use colored::Colorize;
 
 use crate::token::{Token, TokenTypes};
@@ -7,6 +9,7 @@ pub struct Parser {
     pub operator_stack: Vec<Token>,
     pub output_stack: Vec<Token>,
     pub debug: bool,
+    //heap: HashMap<String, Token>,
 }
 
 impl Parser {
@@ -15,6 +18,7 @@ impl Parser {
             operator_stack: Vec::new(),
             output_stack: Vec::new(),
             debug: false,
+            //heap: HashMap::new(),
         }
     }
 
@@ -25,9 +29,27 @@ impl Parser {
 
     pub fn shunt(&mut self, input: &[Token]) -> &Vec<Token> {
         for token in input {
+            // (Numbers, Strings, Bool) gets passed to output stack
             if token.token_type == TokenTypes::Number {
                 self.output_stack.push(token.clone());
             }
+            if token.token_type == TokenTypes::String {
+                self.output_stack.push(token.clone());
+            }
+            if token.token_type == TokenTypes::Bool {
+                self.output_stack.push(token.clone());
+            }
+            if token.token_type == TokenTypes::Identifier {
+                self.output_stack.push(token.clone());
+            }
+
+            // Functions get passed to function stack
+            if token.token_type == TokenTypes::Function {
+                self.operator_stack.push(token.clone());
+            }
+
+            // Blocked gets passed to output
+            // Will bring @ and . function if its on the operator stack
             if token.token_type == TokenTypes::Block {
                 self.output_stack.push(token.clone());
                 if let Some(t) = self.operator_stack.last() {
@@ -45,23 +67,15 @@ impl Parser {
                     }
                 }
             }
-            if token.token_type == TokenTypes::String {
-                self.output_stack.push(token.clone());
-            }
-            if token.token_type == TokenTypes::Bool {
-                self.output_stack.push(token.clone());
-            }
-            if token.token_type == TokenTypes::Function {
-                self.operator_stack.push(token.clone());
-            }
+
             //consider using a flag or option for repl
-            if token.token_type == TokenTypes::Identifier {
-                if token.value.as_str() == "debug" {
-                    self.debug = true;
-                    continue;
-                }
-                self.operator_stack.push(token.clone());
-            }
+            // if token.token_type == TokenTypes::Identifier {
+            //     if token.value.as_str() == "debug" {
+            //         self.debug = true;
+            //         continue;
+            //     }
+            //     //self.operator_stack.push(token.clone());
+            // }
 
             if token.token_type == TokenTypes::Symbol {
                 match token.value.as_str() {
@@ -107,20 +121,16 @@ impl Parser {
                                 }
                             }
 
-                            if !self.operator_stack.is_empty()
-                                && self.operator_stack.last().unwrap().token_type
-                                    == TokenTypes::Identifier
+                            if self.output_stack.last().unwrap().token_type
+                                == TokenTypes::Identifier
                             {
-                                if let Some(t) = self.operator_stack.pop() {
-                                    self.output_stack.push(t.clone())
-                                }
-
                                 self.output_stack.push(Token {
                                     token_type: TokenTypes::Symbol,
                                     value: "@".to_string(),
                                     line_number: 0,
                                     row: 0,
                                     block: vec![],
+                                    proxy: None,
                                 })
                             }
                         }
