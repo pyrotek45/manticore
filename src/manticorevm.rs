@@ -40,7 +40,7 @@ impl ManitcoreVm {
                         value: tok.value.clone(),
                         line_number: 0,
                         row: 0,
-                        block: vec![],
+                        block: tok.block.clone(),
                         proxy: tok.proxy.clone(),
                     }
                     );
@@ -114,44 +114,24 @@ impl ManitcoreVm {
                     }
                 }
 
+                // This function will pop off a block and execute it using the outer scope heap and stack
                 "@" => {
                     if let Some(a) = self.execution_stack.pop() {
-                        if self.heap.contains_key(&a.value) {
-                            if let Some(t) = self.heap.get(&a.value) {
-                                let mut parser = Parser::new();
-                                if self.debug {
-                                    parser.debug = true;
-                                }
-                                let shunted = parser.shunt(&t.block).clone();
-                                let mut vm = ManitcoreVm::new(&shunted, &t.value);
-                                if self.debug {
-                                    vm.debug = true;
-                                }
-                                vm.execution_stack = self.execution_stack.clone();
-                                vm.heap = self.heap.clone();
-                                vm.execute();
-                                self.execution_stack = vm.execution_stack.clone();
-                                if let Some(t) = vm.execution_stack.pop() {
-                                    self.execution_stack.push(t)
-                                }
-                            }
-                        } else {
-                            let mut parser = Parser::new();
-                            if self.debug {
-                                parser.debug = true;
-                            }
-                            let shunted = parser.shunt(&a.block).clone();
-                            let mut vm = ManitcoreVm::new(&shunted, &a.value);
-                            if self.debug {
-                                vm.debug = true;
-                            }
-                            vm.execution_stack = self.execution_stack.clone();
-                            vm.heap = self.heap.clone();
-                            vm.execute();
-                            self.execution_stack = vm.execution_stack.clone();
-                            if let Some(t) = vm.execution_stack.pop() {
-                                self.execution_stack.push(t)
-                            }
+                        let mut parser = Parser::new();
+                        if self.debug {
+                            parser.debug = true;
+                        }
+                        let shunted = parser.shunt(&a.block).clone();
+                        let mut vm = ManitcoreVm::new(&shunted, &a.value);
+                        if self.debug {
+                            vm.debug = true;
+                        }
+                        vm.execution_stack = self.execution_stack.clone();
+                        vm.heap = self.heap.clone();
+                        vm.execute();
+                        self.execution_stack = vm.execution_stack.clone();
+                        if let Some(t) = vm.execution_stack.pop() {
+                            self.execution_stack.push(t)
                         }
                     } else {
                         print_error(
@@ -163,6 +143,7 @@ impl ManitcoreVm {
                         )
                     }
                 }
+
                 "if" => {
                     if let Some(a) = self.execution_stack.pop() {
                         if let Some(b) = self.execution_stack.pop() {
