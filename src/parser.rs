@@ -180,9 +180,7 @@ impl Parser {
                             self.output_stack.push(t.clone())
                         }
                     }
-                    "=" => self.operator_stack.push(token.clone()),
-                    "@" => self.operator_stack.push(token.clone()),
-                    "." => self.operator_stack.push(token.clone()),
+                    "=" | "@" => self.operator_stack.push(token.clone()),
                     _ => {}
                 }
             }

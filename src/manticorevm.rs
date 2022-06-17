@@ -34,7 +34,7 @@ impl ManitcoreVm {
             // push the heap value instead
             if i.token_type == TokenTypes::Identifier {
                 if let Some(tok) = self.heap.get(&i.value) {
-                    //println!("replaced {} with {}", i.value, tok.value);
+                    // Push token from heap , change type to knot
                     self.execution_stack.push(Token {
                         token_type: TokenTypes::Knot,
                         value: tok.value.clone(),
@@ -71,7 +71,7 @@ impl ManitcoreVm {
                 continue;
             }
 
-            //Match values
+            //Match values for each token
             match i.value.to_lowercase().as_str() {
                 // If left paren is found then one must be missing the other pair
                 "(" => print_error(
@@ -98,7 +98,6 @@ impl ManitcoreVm {
                     }
 
                     // Tie each value into the heap using the tokens poped
-
                     for values in variable_stack {
                         if let Some(mut tok) = self.execution_stack.pop() {
                             tok.proxy = Some(values.clone());
@@ -114,53 +113,7 @@ impl ManitcoreVm {
                         }
                     }
                 }
-                "." => {
-                    if let Some(a) = self.execution_stack.pop() {
-                        if self.heap.contains_key(&a.value) {
-                            if let Some(t) = self.heap.get(&a.value) {
-                                let mut parser = Parser::new();
-                                if self.debug {
-                                    parser.debug = true;
-                                }
-                                let shunted = parser.shunt(&t.block).clone();
-                                let mut vm = ManitcoreVm::new(&shunted, &t.value);
-                                if self.debug {
-                                    vm.debug = true;
-                                }
-                                vm.execution_stack = self.execution_stack.clone();
-                                vm.heap = self.heap.clone();
-                                vm.execute();
-                                if let Some(t) = vm.execution_stack.pop() {
-                                    self.execution_stack.push(t)
-                                }
-                            }
-                        } else {
-                            let mut parser = Parser::new();
-                            if self.debug {
-                                parser.debug = true;
-                            }
-                            let shunted = parser.shunt(&a.block).clone();
-                            let mut vm = ManitcoreVm::new(&shunted, &a.value);
-                            if self.debug {
-                                vm.debug = true;
-                            }
-                            vm.execution_stack = self.execution_stack.clone();
-                            vm.heap = self.heap.clone();
-                            vm.execute();
-                            if let Some(t) = vm.execution_stack.pop() {
-                                self.execution_stack.push(t)
-                            }
-                        }
-                    } else {
-                        print_error(
-                            "not enough arguments for .",
-                            i.line_number,
-                            i.row,
-                            &self.file,
-                            &self.last_instruction,
-                        )
-                    };
-                }
+
                 "@" => {
                     if let Some(a) = self.execution_stack.pop() {
                         if self.heap.contains_key(&a.value) {
