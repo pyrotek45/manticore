@@ -88,9 +88,13 @@ impl ManitcoreVm {
 
                     // Pop from stack untill no more identifiers
                     while let Some(k) = self.execution_stack.last() {
-                        if k.token_type == TokenTypes::Identifier {
+                        if k.token_type == TokenTypes::Identifier || k.proxy.is_some() {
                             if let Some(tok) = self.execution_stack.pop() {
-                                variable_stack.push(tok.value.clone());
+                                if let Some(p) = tok.proxy {
+                                    variable_stack.push(p.clone());
+                                } else {
+                                    variable_stack.push(tok.value.clone());
+                                }
                             }
                         } else {
                             break;
