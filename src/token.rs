@@ -9,6 +9,8 @@ pub enum TokenTypes {
     NewLine,
     Bool,
     Knot,
+    Break,
+    List
 }
 
 #[derive(Clone)]

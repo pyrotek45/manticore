@@ -17,18 +17,36 @@ pub struct Lexer {
 }
 fn manticore_functions() -> Vec<String> {
     vec![
+        // basic output
         "print".to_string(),
         "println".to_string(),
+
+        // program flow
         "if".to_string(),
+
+        // block control
         "call".to_string(),
-        "set".to_string(),
         "@".to_string(),
+        "ret".to_string(),
+        "let".to_string(),
+
+        // stack functions
         "dup".to_string(),
+        "rev".to_string(),
+        "shc".to_string(),
+        "pop".to_string(),
+        "sec".to_string(),
+
+        // string function
         "concat".to_string(),
+
+        // heap control
+        "set".to_string(),
         "tie".to_string(),
+
+        // basic repl control
         "exit".to_string(),
-        "reverse".to_string(),
-        "clear".to_string(),
+ 
     ]
 }
 
@@ -248,8 +266,8 @@ impl Lexer {
                 }
 
                 // Symbols
-                '+' | '-' | '*' | '/' | '(' | ')' | '[' | ']' | '<' | '>' | '`' | '~' | '!'
-                | '@' | '$' | '%' | '^' | '&' | ',' | '?' | ';' | ':' | '=' | '.' => {
+                '+' | '-' | '*' | '/' | '(' | ')' | '<' | '>' | '`' | '~' | '@'
+                | '$' | '%' | '^' | '&' | ',' | '?' | ';' | ':' | '=' | '.' => {
                     if let Some(t) = self.check_token() {
                         if let Some(vec_last) = self.block_stack.last_mut() {
                             vec_last.push(t)
@@ -324,6 +342,41 @@ impl Lexer {
                         }
                     }
                 }
+
+                // Parsing blocks
+                '[' => {
+                    if let Some(t) = self.check_token() {
+                        if let Some(vec_last) = self.block_stack.last_mut() {
+                            vec_last.push(t)
+                        }
+                        self.buffer.clear();
+                    }
+
+                    self.block_stack.push(vec![]);
+                }
+
+                ']' => {
+                    if let Some(t) = self.check_token() {
+                        if let Some(vec_last) = self.block_stack.last_mut() {
+                            vec_last.push(t)
+                        }
+                        self.buffer.clear();
+                    };
+
+                    if let Some(list) = self.block_stack.pop() {
+                        if let Some(vec_last) = self.block_stack.last_mut() {
+                            vec_last.push(Token {
+                                token_type: TokenTypes::List,
+                                value: "list".to_string(),
+                                line_number: self.line_number,
+                                row: self.row,
+                                block: list,
+                                proxy: None,
+                            })
+                        }
+                    }
+                }
+
                 _ => println!("ERROR: {} is not defined. Line {1}", c, self.line_number),
             }
             self.row += 1;

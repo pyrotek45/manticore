@@ -10,6 +10,7 @@ pub struct ManitcoreVm {
     instruction_tokens: Vec<Token>,
     execution_stack: Vec<Token>,
     last_instruction: String,
+    stack_set: usize,
     file: String,
     pub debug: bool,
     heap: HashMap<String, Token>,
@@ -24,6 +25,7 @@ impl ManitcoreVm {
             last_instruction: String::new(),
             debug: false,
             heap: HashMap::new(),
+            stack_set: 0,
         }
     }
 
@@ -42,15 +44,14 @@ impl ManitcoreVm {
                         row: 0,
                         block: tok.block.clone(),
                         proxy: tok.proxy.clone(),
-                    }
-                    );
+                    });
                     continue;
                 }
                 self.execution_stack.push(i.clone());
                 continue;
             }
 
-            // Strings , blocks, numbers and bools get pushed
+            // Strings , blocks, list, numbers and bools get pushed
             // onto the execution stack automatically
             if i.token_type == TokenTypes::String {
                 self.execution_stack.push(i.clone());
@@ -70,6 +71,14 @@ impl ManitcoreVm {
                 self.execution_stack.push(i.clone());
                 continue;
             }
+            if i.token_type == TokenTypes::Break {
+                self.execution_stack.push(i.clone());
+                continue;
+            }
+            if i.token_type == TokenTypes::List {
+                self.execution_stack.push(i.clone());
+                continue;
+            }
 
             //Match values for each token
             match i.value.to_lowercase().as_str() {
@@ -82,27 +91,33 @@ impl ManitcoreVm {
                     &self.last_instruction,
                 ),
 
+                // Clears out the heap
+                "shc" => self.heap.clear(),
+                "pop" => if let Some(_t) = self.execution_stack.pop() {},
                 // Used to tie more than 1 token at a time from the stack
                 "set" => {
                     let mut variable_stack: Vec<String> = Vec::new();
+                    self.stack_set = 0;
 
                     // Pop from stack untill no more identifiers
                     while let Some(k) = self.execution_stack.last() {
-                        if k.token_type == TokenTypes::Identifier || k.proxy.is_some() {
+                        if k.token_type == TokenTypes::Identifier {
                             if let Some(tok) = self.execution_stack.pop() {
-                                if let Some(p) = tok.proxy {
-                                    variable_stack.push(p.clone());
-                                } else {
-                                    variable_stack.push(tok.value.clone());
-                                }
+                                variable_stack.push(tok.value.clone());
                             }
                         } else {
+                            if let Some(t) = self.execution_stack.last() {
+                                if t.token_type == TokenTypes::Break {
+                                    self.execution_stack.pop();
+                                }
+                            }
                             break;
                         }
                     }
 
                     // Tie each value into the heap using the tokens poped
                     for values in variable_stack {
+                        self.stack_set += 1;
                         if let Some(mut tok) = self.execution_stack.pop() {
                             tok.proxy = Some(values.clone());
                             self.heap.insert(values, tok.clone());
@@ -117,25 +132,111 @@ impl ManitcoreVm {
                         }
                     }
                 }
-
                 // This function will pop off a block and execute it using the outer scope heap and stack
-                "@" => {
+                "call" => {
                     if let Some(a) = self.execution_stack.pop() {
+                        // Create new vm
                         let mut parser = Parser::new();
                         if self.debug {
                             parser.debug = true;
                         }
+
+                        // Shunt tokens in vm
                         let shunted = parser.shunt(&a.block).clone();
                         let mut vm = ManitcoreVm::new(&shunted, &a.value);
                         if self.debug {
                             vm.debug = true;
                         }
+
+                        // Copy the stack and the heap inside the vm
                         vm.execution_stack = self.execution_stack.clone();
                         vm.heap = self.heap.clone();
+
+                        // Run the vm
                         vm.execute();
-                        self.execution_stack = vm.execution_stack.clone();
-                        if let Some(t) = vm.execution_stack.pop() {
-                            self.execution_stack.push(t)
+
+                        for _x in 0..vm.stack_set {
+                            if let Some(_t) = self.execution_stack.pop() {}
+                        }
+
+                        // Copy the last item to return from inside the vm to the outside
+                        if let Some(return_value) = vm.execution_stack.pop() {
+                            self.execution_stack.push(return_value)
+                        }
+                    } else {
+                        print_error(
+                            "not enough arguments for call",
+                            i.line_number,
+                            i.row,
+                            &self.file,
+                            &self.last_instruction,
+                        )
+                    }
+                }
+                // This function will pop off a block and execute it using the outer scope heap and stack
+                "let" => {
+                    if let Some(a) = self.execution_stack.pop() {
+                        let mut new_stack = vec![];
+
+
+                        for t in a.block {
+                            if let Some(tok) = self.heap.get(&t.value) {
+                                new_stack.push(tok.clone())
+                            } else {
+                                new_stack.push(t)
+                            }
+                        }
+
+                        self.execution_stack.push(Token {
+                            token_type: TokenTypes::Knot,
+                            value: a.value.clone(),
+                            line_number: 0,
+                            row: 0,
+                            block: new_stack.clone(),
+                            proxy: a.proxy.clone(),
+                        });
+
+
+                    } else {
+                        print_error(
+                            "not enough arguments for mod",
+                            i.line_number,
+                            i.row,
+                            &self.file,
+                            &self.last_instruction,
+                        )
+                    }
+                }
+                // This function will pop off a block and execute it using the outer scope heap and stack
+                "@" => {
+                    if let Some(a) = self.execution_stack.pop() {
+                        // Create new vm
+                        let mut parser = Parser::new();
+                        if self.debug {
+                            parser.debug = true;
+                        }
+
+                        // Shunt tokens in vm
+                        let shunted = parser.shunt(&a.block).clone();
+                        let mut vm = ManitcoreVm::new(&shunted, &a.value);
+                        if self.debug {
+                            vm.debug = true;
+                        }
+
+                        // Copy the stack and the heap inside the vm
+                        vm.execution_stack = self.execution_stack.clone();
+                        vm.heap = self.heap.clone();
+
+                        // Run the vm
+                        vm.execute();
+
+                        for _x in 0..vm.stack_set {
+                            if let Some(_t) = self.execution_stack.pop() {}
+                        }
+
+                        // Copy the last item to return from inside the vm to the outside
+                        if let Some(return_value) = vm.execution_stack.pop() {
+                            self.execution_stack.push(return_value)
                         }
                     } else {
                         print_error(
@@ -147,13 +248,61 @@ impl ManitcoreVm {
                         )
                     }
                 }
-
+                "ret" => {
+                    if let (Some(a), Some(b), Some(c)) = (
+                        self.execution_stack.pop(),
+                        self.execution_stack.pop(),
+                        self.execution_stack.pop(),
+                    ) {
+                        if c.value == b.value {
+                            self.execution_stack.push(a)
+                        }
+                    } else {
+                        print_error(
+                            "not enough arguments for ret",
+                            i.line_number,
+                            i.row,
+                            &self.file,
+                            &self.last_instruction,
+                        )
+                    };
+                }
                 "if" => {
-                    if let Some(a) = self.execution_stack.pop() {
-                        if let Some(b) = self.execution_stack.pop() {
-                            //if true single if statement
-                            if b.token_type == TokenTypes::Bool {
-                                if b.value == "true" {
+                    if let (Some(a), Some(b)) =
+                        (self.execution_stack.pop(), self.execution_stack.pop())
+                    {
+                        //if true single if statement
+                        if b.token_type == TokenTypes::Bool {
+                            if b.value == "true" {
+                                let mut parser = Parser::new();
+                                if self.debug {
+                                    parser.debug = true
+                                }
+                                let shunted = parser.shunt(&a.block).clone();
+                                let mut vm = ManitcoreVm::new(&shunted, &a.value);
+                                if self.debug {
+                                    vm.debug = true
+                                }
+                                vm.heap = self.heap.clone();
+                                vm.execute();
+                                self.heap = vm.heap.clone();
+                            }
+                        } else if let Some(c) = self.execution_stack.pop() {
+                            if c.token_type == TokenTypes::Bool {
+                                if c.value == "true" {
+                                    let mut parser = Parser::new();
+                                    if self.debug {
+                                        parser.debug = true
+                                    }
+                                    let shunted = parser.shunt(&b.block).clone();
+                                    let mut vm = ManitcoreVm::new(&shunted, &b.value);
+                                    if self.debug {
+                                        vm.debug = true
+                                    }
+                                    vm.heap = self.heap.clone();
+                                    vm.execute();
+                                    self.heap = vm.heap.clone();
+                                } else {
                                     let mut parser = Parser::new();
                                     if self.debug {
                                         parser.debug = true
@@ -167,44 +316,6 @@ impl ManitcoreVm {
                                     vm.execute();
                                     self.heap = vm.heap.clone();
                                 }
-                            } else if let Some(c) = self.execution_stack.pop() {
-                                if c.token_type == TokenTypes::Bool {
-                                    if c.value == "true" {
-                                        let mut parser = Parser::new();
-                                        if self.debug {
-                                            parser.debug = true
-                                        }
-                                        let shunted = parser.shunt(&b.block).clone();
-                                        let mut vm = ManitcoreVm::new(&shunted, &b.value);
-                                        if self.debug {
-                                            vm.debug = true
-                                        }
-                                        vm.heap = self.heap.clone();
-                                        vm.execute();
-                                        self.heap = vm.heap.clone();
-                                    } else {
-                                        let mut parser = Parser::new();
-                                        if self.debug {
-                                            parser.debug = true
-                                        }
-                                        let shunted = parser.shunt(&a.block).clone();
-                                        let mut vm = ManitcoreVm::new(&shunted, &a.value);
-                                        if self.debug {
-                                            vm.debug = true
-                                        }
-                                        vm.heap = self.heap.clone();
-                                        vm.execute();
-                                        self.heap = vm.heap.clone();
-                                    }
-                                }
-                            } else {
-                                print_error(
-                                    "not enough arguments for if",
-                                    i.line_number,
-                                    i.row,
-                                    &self.file,
-                                    &self.last_instruction,
-                                )
                             }
                         } else {
                             print_error(
@@ -225,10 +336,10 @@ impl ManitcoreVm {
                         )
                     };
                 }
-                "clear" => {
+                "sec" => {
                     self.execution_stack.clear();
                 }
-                "reverse" => {
+                "rev" => {
                     self.execution_stack.reverse();
                 }
                 "tie" => {
@@ -263,31 +374,18 @@ impl ManitcoreVm {
                     };
                 }
                 "=" => {
+                    // todo: does not support blocks atm
                     if let (Some(a), Some(b)) =
                         (self.execution_stack.pop(), self.execution_stack.pop())
                     {
                         let mut f: String = String::new();
                         let mut s: String = String::new();
 
-                        if self.heap.contains_key(&a.value) {
-                            if let Some(tok) = self.heap.get(&a.value) {
-                                if let Ok(v) = tok.value.parse() {
-                                    f = v
-                                } else {
-                                    print_error(
-                                        "expected a number from variable",
-                                        i.line_number,
-                                        i.row,
-                                        &self.file,
-                                        &self.last_instruction,
-                                    )
-                                }
-                            }
-                        } else if let Ok(v) = a.value.parse() {
+                        if let Ok(v) = a.value.parse() {
                             f = v
                         } else {
                             print_error(
-                                "expected a string",
+                                "expected a normal token",
                                 i.line_number,
                                 i.row,
                                 &self.file,
@@ -295,25 +393,11 @@ impl ManitcoreVm {
                             )
                         }
 
-                        if self.heap.contains_key(&b.value) {
-                            if let Some(tok) = self.heap.get(&b.value) {
-                                if let Ok(v) = tok.value.parse() {
-                                    s = v
-                                } else {
-                                    print_error(
-                                        "expected a token from variable",
-                                        i.line_number,
-                                        i.row,
-                                        &self.file,
-                                        &self.last_instruction,
-                                    )
-                                }
-                            }
-                        } else if let Ok(v) = b.value.parse() {
+                        if let Ok(v) = b.value.parse() {
                             s = v
                         } else {
                             print_error(
-                                "expected a token",
+                                "expected a normal token",
                                 i.line_number,
                                 i.row,
                                 &self.file,
@@ -346,19 +430,7 @@ impl ManitcoreVm {
                         let mut f: f32 = 0.0;
                         let mut s: f32 = 0.0;
 
-                        if let Some(tok) = self.heap.get(&a.value) {
-                            if let Ok(v) = tok.value.parse() {
-                                f = v
-                            } else {
-                                print_error(
-                                    "expected a number from variable",
-                                    i.line_number,
-                                    i.row,
-                                    &self.file,
-                                    &self.last_instruction,
-                                )
-                            }
-                        } else if let Ok(v) = a.value.parse() {
+                        if let Ok(v) = a.value.parse() {
                             f = v
                         } else {
                             print_error(
@@ -370,21 +442,7 @@ impl ManitcoreVm {
                             )
                         }
 
-                        if self.heap.contains_key(&b.value) {
-                            if let Some(tok) = self.heap.get(&b.value) {
-                                if let Ok(v) = tok.value.parse() {
-                                    s = v
-                                } else {
-                                    print_error(
-                                        "expected a number from variable",
-                                        i.line_number,
-                                        i.row,
-                                        &self.file,
-                                        &self.last_instruction,
-                                    )
-                                }
-                            }
-                        } else if let Ok(v) = b.value.parse() {
+                        if let Ok(v) = b.value.parse() {
                             s = v
                         } else {
                             print_error(
@@ -421,21 +479,7 @@ impl ManitcoreVm {
                         let mut f: f32 = 0.0;
                         let mut s: f32 = 0.0;
 
-                        if self.heap.contains_key(&a.value) {
-                            if let Some(tok) = self.heap.get(&a.value) {
-                                if let Ok(v) = tok.value.parse() {
-                                    f = v
-                                } else {
-                                    print_error(
-                                        "expected a number from variable",
-                                        i.line_number,
-                                        i.row,
-                                        &self.file,
-                                        &self.last_instruction,
-                                    )
-                                }
-                            }
-                        } else if let Ok(v) = a.value.parse() {
+                        if let Ok(v) = a.value.parse() {
                             f = v
                         } else {
                             print_error(
@@ -447,21 +491,7 @@ impl ManitcoreVm {
                             )
                         }
 
-                        if self.heap.contains_key(&b.value) {
-                            if let Some(tok) = self.heap.get(&b.value) {
-                                if let Ok(v) = tok.value.parse() {
-                                    s = v
-                                } else {
-                                    print_error(
-                                        "expected a number from variable",
-                                        i.line_number,
-                                        i.row,
-                                        &self.file,
-                                        &self.last_instruction,
-                                    )
-                                }
-                            }
-                        } else if let Ok(v) = b.value.parse() {
+                        if let Ok(v) = b.value.parse() {
                             s = v
                         } else {
                             print_error(
@@ -548,21 +578,7 @@ impl ManitcoreVm {
                         let mut f: f32 = 0.0;
                         let mut s: f32 = 0.0;
 
-                        if self.heap.contains_key(&a.value) {
-                            if let Some(tok) = self.heap.get(&a.value) {
-                                if let Ok(v) = tok.value.parse() {
-                                    f = v
-                                } else {
-                                    print_error(
-                                        "expected a number from variable",
-                                        i.line_number,
-                                        i.row,
-                                        &self.file,
-                                        &self.last_instruction,
-                                    )
-                                }
-                            }
-                        } else if let Ok(v) = a.value.parse() {
+                        if let Ok(v) = a.value.parse() {
                             f = v
                         } else {
                             print_error(
@@ -574,21 +590,7 @@ impl ManitcoreVm {
                             )
                         }
 
-                        if self.heap.contains_key(&b.value) {
-                            if let Some(tok) = self.heap.get(&b.value) {
-                                if let Ok(v) = tok.value.parse() {
-                                    s = v
-                                } else {
-                                    print_error(
-                                        "expected a number from variable",
-                                        i.line_number,
-                                        i.row,
-                                        &self.file,
-                                        &self.last_instruction,
-                                    )
-                                }
-                            }
-                        } else if let Ok(v) = b.value.parse() {
+                        if let Ok(v) = b.value.parse() {
                             s = v
                         } else {
                             print_error(
@@ -625,21 +627,7 @@ impl ManitcoreVm {
                         let mut f: String = String::new();
                         let mut s: String = String::new();
 
-                        if self.heap.contains_key(&a.value) {
-                            if let Some(tok) = self.heap.get(&a.value) {
-                                if let Ok(v) = tok.value.parse() {
-                                    f = v
-                                } else {
-                                    print_error(
-                                        "expected a number from variable",
-                                        i.line_number,
-                                        i.row,
-                                        &self.file,
-                                        &self.last_instruction,
-                                    )
-                                }
-                            }
-                        } else if let Ok(v) = a.value.parse() {
+                        if let Ok(v) = a.value.parse() {
                             f = v
                         } else {
                             print_error(
@@ -651,21 +639,7 @@ impl ManitcoreVm {
                             )
                         }
 
-                        if self.heap.contains_key(&b.value) {
-                            if let Some(tok) = self.heap.get(&b.value) {
-                                if let Ok(v) = tok.value.parse() {
-                                    s = v
-                                } else {
-                                    print_error(
-                                        "expected a string from variable",
-                                        i.line_number,
-                                        i.row,
-                                        &self.file,
-                                        &self.last_instruction,
-                                    )
-                                }
-                            }
-                        } else if let Ok(v) = b.value.parse() {
+                        if let Ok(v) = b.value.parse() {
                             s = v
                         } else {
                             print_error(
@@ -712,51 +686,26 @@ impl ManitcoreVm {
                 "println" => {
                     let mut escape_char = false;
                     if let Some(a) = self.execution_stack.pop() {
-                        if self.heap.contains_key(&a.value) {
-                            if let Some(tok) = self.heap.get(&a.value) {
-                                for c in tok.value.chars() {
-                                    if !escape_char && c == '\\' {
-                                        escape_char = true;
-                                        continue;
-                                    }
-                                    if escape_char {
-                                        if c == 'n' {
-                                            println!();
-                                            escape_char = false;
-                                            continue;
-                                        }
-                                        if c == 't' {
-                                            print!("\t");
-                                            escape_char = false;
-                                            continue;
-                                        }
-                                    }
-                                    print!("{}", c)
-                                }
+                        for c in a.value.chars() {
+                            if !escape_char && c == '\\' {
+                                escape_char = true;
+                                continue;
                             }
-                            println!();
-                        } else {
-                            for c in a.value.chars() {
-                                if !escape_char && c == '\\' {
-                                    escape_char = true;
+                            if escape_char {
+                                if c == 'n' {
+                                    println!();
+                                    escape_char = false;
                                     continue;
                                 }
-                                if escape_char {
-                                    if c == 'n' {
-                                        println!();
-                                        escape_char = false;
-                                        continue;
-                                    }
-                                    if c == 't' {
-                                        print!("\t");
-                                        escape_char = false;
-                                        continue;
-                                    }
+                                if c == 't' {
+                                    print!("\t");
+                                    escape_char = false;
+                                    continue;
                                 }
-                                print!("{}", c)
                             }
-                            println!();
+                            print!("{}", c)
                         }
+                        println!();
                     } else {
                         print_error(
                             "not enough arguments for print",
@@ -770,48 +719,24 @@ impl ManitcoreVm {
                 "print" => {
                     let mut escape_char = false;
                     if let Some(a) = self.execution_stack.pop() {
-                        if self.heap.contains_key(&a.value) {
-                            if let Some(tok) = self.heap.get(&a.value) {
-                                for c in tok.value.chars() {
-                                    if !escape_char && c == '\\' {
-                                        escape_char = true;
-                                        continue;
-                                    }
-                                    if escape_char {
-                                        if c == 'n' {
-                                            println!();
-                                            escape_char = false;
-                                            continue;
-                                        }
-                                        if c == 't' {
-                                            print!("\t");
-                                            escape_char = false;
-                                            continue;
-                                        }
-                                    }
-                                    print!("{}", c)
-                                }
+                        for c in a.value.chars() {
+                            if !escape_char && c == '\\' {
+                                escape_char = true;
+                                continue;
                             }
-                        } else {
-                            for c in a.value.chars() {
-                                if !escape_char && c == '\\' {
-                                    escape_char = true;
+                            if escape_char {
+                                if c == 'n' {
+                                    println!();
+                                    escape_char = false;
                                     continue;
                                 }
-                                if escape_char {
-                                    if c == 'n' {
-                                        println!();
-                                        escape_char = false;
-                                        continue;
-                                    }
-                                    if c == 't' {
-                                        print!("\t");
-                                        escape_char = false;
-                                        continue;
-                                    }
+                                if c == 't' {
+                                    print!("\t");
+                                    escape_char = false;
+                                    continue;
                                 }
-                                print!("{}", c)
                             }
+                            print!("{}", c)
                         }
                     } else {
                         print_error(
@@ -824,31 +749,12 @@ impl ManitcoreVm {
                     };
                 }
                 "newline" => {}
-                _ => {
-
-                    // println!(
-                    //     "{}:instruction {} is not implemented.",
-                    //     "ERROR".red(),
-                    //     i.value.yellow()
-                    // );
-
-                    // let mut functions = Lexicon::new();
-                    // functions.insert("print");
-                    // functions.insert("call");
-                    // functions.insert("if");
-                    // functions.insert("dup");
-                    // functions.insert("concat");
-                    // let corrections = functions.corrections_for(&i.value);
-                    // if !corrections.is_empty() {
-                    //     println!("  NOTE: Did you mean:");
-                    //     for c in corrections {
-                    //         println!("    {}", c.bright_blue());
-                    //     }
-                    // }
-                }
+                _ => {}
             }
+
             self.last_instruction = i.value.to_owned();
         }
+
         if self.debug {
             for (k, v) in &self.heap {
                 if let Some(p) = &v.proxy {
