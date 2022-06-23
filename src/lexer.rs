@@ -20,33 +20,28 @@ fn manticore_functions() -> Vec<String> {
         // basic output
         "print".to_string(),
         "println".to_string(),
-
         // program flow
         "if".to_string(),
-
         // block control
         "call".to_string(),
         "@".to_string(),
         "ret".to_string(),
         "let".to_string(),
-
         // stack functions
         "dup".to_string(),
         "rev".to_string(),
         "shc".to_string(),
         "pop".to_string(),
         "sec".to_string(),
-
         // string function
         "concat".to_string(),
-
         // heap control
         "set".to_string(),
         "tie".to_string(),
-
         // basic repl control
         "exit".to_string(),
- 
+        // math functions
+        "neg".to_string(),
     ]
 }
 
@@ -223,17 +218,6 @@ impl Lexer {
                         self.buffer.clear();
                     }
 
-                    if let Some(vec_last) = self.block_stack.last_mut() {
-                        vec_last.push(Token {
-                            token_type: TokenTypes::NewLine,
-                            value: "newline".to_string(),
-                            line_number: self.line_number,
-                            row: self.row,
-                            block: vec![],
-                            proxy: None,
-                        })
-                    }
-
                     self.line_number += 1;
                     self.row = 0;
                     continue;
@@ -266,8 +250,8 @@ impl Lexer {
                 }
 
                 // Symbols
-                '+' | '-' | '*' | '/' | '(' | ')' | '<' | '>' | '`' | '~' | '@'
-                | '$' | '%' | '^' | '&' | ',' | '?' | ';' | ':' | '=' | '.' => {
+                '+' | '-' | '*' | '/' | '(' | ')' | '<' | '>' | '`' | '~' | '@' | '$' | '%'
+                | '^' | '&' | ',' | '?' | ';' | ':' | '=' | '.' => {
                     if let Some(t) = self.check_token() {
                         if let Some(vec_last) = self.block_stack.last_mut() {
                             vec_last.push(t)

@@ -90,7 +90,40 @@ impl ManitcoreVm {
                     &self.file,
                     &self.last_instruction,
                 ),
+                "neg" => {
+                    if let Some(a) = self.execution_stack.pop() {
+                        let mut f: f32 = 0.0;
 
+                        if let Ok(v) = a.value.parse() {
+                            f = v
+                        } else {
+                            print_error(
+                                "expected a number",
+                                i.line_number,
+                                i.row,
+                                &self.file,
+                                &self.last_instruction,
+                            )
+                        }
+
+                        self.execution_stack.push(Token {
+                            token_type: TokenTypes::Number,
+                            value: (-f).to_string(),
+                            line_number: 0,
+                            row: 0,
+                            block: vec![],
+                            proxy: None,
+                        })
+                    } else {
+                        print_error(
+                            "not enough arguments for +",
+                            i.line_number,
+                            i.row,
+                            &self.file,
+                            &self.last_instruction,
+                        )
+                    };
+                }
                 // Clears out the heap
                 "shc" => self.heap.clear(),
                 "pop" => if let Some(_t) = self.execution_stack.pop() {},
@@ -178,7 +211,6 @@ impl ManitcoreVm {
                     if let Some(a) = self.execution_stack.pop() {
                         let mut new_stack = vec![];
 
-
                         for t in a.block {
                             if let Some(tok) = self.heap.get(&t.value) {
                                 new_stack.push(tok.clone())
@@ -195,8 +227,6 @@ impl ManitcoreVm {
                             block: new_stack.clone(),
                             proxy: a.proxy.clone(),
                         });
-
-
                     } else {
                         print_error(
                             "not enough arguments for mod",
@@ -225,7 +255,7 @@ impl ManitcoreVm {
 
                         // Copy the stack and the heap inside the vm
                         vm.execution_stack = self.execution_stack.clone();
-                        vm.heap = self.heap.clone();
+                        // vm.heap = self.heap.clone();
 
                         // Run the vm
                         vm.execute();

@@ -6,11 +6,10 @@ pub enum TokenTypes {
     Number,
     String,
     Symbol,
-    NewLine,
     Bool,
     Knot,
     Break,
-    List
+    List,
 }
 
 #[derive(Clone)]

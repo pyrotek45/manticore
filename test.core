@@ -68,6 +68,7 @@ println(1 + 2) # will be parsed into [1] [2] [+] [println] automatically
 print "hello " "world\n" concat; # this will be converted into ->  [hello ] [world\n] [concat] [print]
 
 #todo
+#    - setarray functions
 #    - multi line comments
 #    - ignore underscore for long numbers?? 2_000?
 #    - declare empty variables?
@@ -81,6 +82,7 @@ print "hello " "world\n" concat; # this will be converted into ->  [hello ] [wor
 #    - string utilities 
 #    - if elif else
 #    - better error handling
+#    - randomize function
 
 
 

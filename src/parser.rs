@@ -1,15 +1,11 @@
-//use std::collections::HashMap;
-
 use colored::Colorize;
 
 use crate::token::{Token, TokenTypes};
 
 pub struct Parser {
-    //input_stack: Vec<Token>,
     pub operator_stack: Vec<Token>,
     pub output_stack: Vec<Token>,
     pub debug: bool,
-    //heap: HashMap<String, Token>,
 }
 
 impl Parser {
@@ -18,7 +14,6 @@ impl Parser {
             operator_stack: Vec::new(),
             output_stack: Vec::new(),
             debug: false,
-            //heap: HashMap::new(),
         }
     }
 
@@ -33,6 +28,7 @@ impl Parser {
             if token.token_type == TokenTypes::Number {
                 self.output_stack.push(token.clone());
             }
+
             if token.token_type == TokenTypes::String {
                 self.output_stack.push(token.clone());
             }
@@ -40,7 +36,7 @@ impl Parser {
                 self.output_stack.push(token.clone());
             }
 
-            // Functions get passed to function stack
+            // Functions get passed to operator stack
             if token.token_type == TokenTypes::Function {
                 self.operator_stack.push(token.clone())
             }
@@ -48,19 +44,17 @@ impl Parser {
             if token.token_type == TokenTypes::Identifier {
                 self.operator_stack.push(token.clone());
             }
-            // Blocked gets passed to output
-            // Will bring @ and . function if its on the operator stack
+
+            // Blocked gets passed to output stack
+            // Will bring @ function if its on the operator stack
             if token.token_type == TokenTypes::Block {
                 self.output_stack.push(token.clone());
-                if let Some(t) = self.operator_stack.last() {
-                    if t.value == "@" {
-                        if let Some(tok) = self.operator_stack.pop() {
-                            self.output_stack.push(tok)
-                        }
+                if let Some(last) = self.operator_stack.last().cloned() {
+                    if last.value == "@" {
+                        self.output_stack.push(last)
                     }
                 }
             }
-
 
             // List go to output stack
             if token.token_type == TokenTypes::List {
@@ -70,21 +64,35 @@ impl Parser {
             if token.token_type == TokenTypes::Symbol {
                 match token.value.as_str() {
                     "," => {
-                        if let Some(t) = self.operator_stack.last() {
-                            if t.value == "(" {
-                                if let Some(temp) = self.operator_stack.pop() {
-                                    if let Some(f) = self.operator_stack.last() {
-                                        if f.token_type == TokenTypes::Function {
-                                            self.output_stack
-                                                .push(self.operator_stack.last().unwrap().clone())
-                                        }
+                        // pop temp off if its and check if its "("
+                        if let Some(temp) = self.operator_stack.pop() {
+                            if temp.value == "(" {
+                                if let Some(func) = self.operator_stack.last().cloned() {
+                                    // if it is function pop function
+                                    if func.token_type == TokenTypes::Function {
+                                        self.output_stack.push(func.clone())
                                     }
-                                    self.operator_stack.push(temp)
+
+                                    // if it is identifier then pop and add @
+                                    if func.token_type == TokenTypes::Identifier {
+                                        self.output_stack.push(func.clone());
+                                        self.output_stack.push(Token {
+                                            token_type: TokenTypes::Symbol,
+                                            value: "@".to_string(),
+                                            line_number: 0,
+                                            row: 0,
+                                            block: vec![],
+                                            proxy: None,
+                                        })
+                                    }
                                 }
                             }
+                            // put temp back
+                            self.operator_stack.push(temp)
                         }
                     }
                     "(" => {
+                        // if last function is set, set break point
                         if let Some(tok) = self.operator_stack.last() {
                             if tok.value == "set" {
                                 self.output_stack.push(Token {
@@ -100,35 +108,26 @@ impl Parser {
                         self.operator_stack.push(token.clone());
                     }
                     ")" => {
-                        if !self.operator_stack.is_empty() {
-                            while self.operator_stack.last().unwrap().value != "(" {
-                                if let Some(t) = self.operator_stack.pop() {
-                                    self.output_stack.push(t.to_owned());
-                                }
-                                if self.operator_stack.is_empty() {
-                                    break;
-                                }
+                        // while the last item in the operator stack is not
+                        // a "(", pop off items into output stack
+                        while let Some(last) = self.operator_stack.pop() {
+                            if last.value != "(" {
+                                self.output_stack.push(last)
+                            } else {
+                                //self.operator_stack.push(last);
+                                break;
                             }
+                        }
 
-                            if !self.operator_stack.is_empty() {
-                                self.operator_stack.pop().unwrap();
-                            }
-
-                            if !self.operator_stack.is_empty()
-                                && self.operator_stack.last().unwrap().token_type
-                                    == TokenTypes::Function
-                            {
-                                if let Some(t) = self.operator_stack.pop() {
-                                    self.output_stack.push(t.clone());
+                        // if last item on operator stack is a function pop
+                        // this is for leapfrog TM parsing
+                        if let Some(last) = self.operator_stack.pop() {
+                            match last.token_type {
+                                TokenTypes::Function => {
+                                    self.output_stack.push(last);
                                 }
-                            }
-
-                            if !self.operator_stack.is_empty()
-                                && self.operator_stack.last().unwrap().token_type
-                                    == TokenTypes::Identifier
-                            {
-                                if let Some(t) = self.operator_stack.pop() {
-                                    self.output_stack.push(t.clone());
+                                TokenTypes::Identifier => {
+                                    self.output_stack.push(last);
                                     self.output_stack.push(Token {
                                         token_type: TokenTypes::Symbol,
                                         value: "@".to_string(),
@@ -138,56 +137,60 @@ impl Parser {
                                         proxy: None,
                                     })
                                 }
+                                _ => {
+                                    self.operator_stack.push(last)
+                                }
                             }
                         }
                     }
                     "+" | "-" | "*" | "/" => {
                         //Pop off higher precedence before adding
-                        if !self.operator_stack.is_empty()
-                            && self.operator_stack.last().unwrap().value != "("
-                        {
-                            while self.operator_stack.last().unwrap().precedence()
-                                > token.precedence()
-                            {
-                                if let Some(t) = self.operator_stack.pop() {
-                                    self.output_stack.push(t.clone())
-                                }
-                                if self.operator_stack.is_empty() {
-                                    break;
-                                }
-                            }
 
-                            if !self.operator_stack.is_empty() {
-                                while self.operator_stack.last().unwrap().precedence()
-                                    == token.precedence()
-                                    && token.is_left_associative()
-                                {
-                                    if let Some(t) = self.operator_stack.pop() {
-                                        self.output_stack.push(t.clone())
+                        // if last item in operator stack is not a "("
+                        // and while last item precedence is > than
+                        // current token precedence pop until empty
+                        if let Some(temp) = self.operator_stack.last().cloned() {
+                            if temp.value != "(" {
+                                while let Some(op) = self.operator_stack.last().cloned() {
+                                    if op.precedence() > token.precedence() {
+                                        if let Some(t) = self.operator_stack.pop() {
+                                            self.output_stack.push(t)
+                                        }
+                                    } else {
+                                        break;
                                     }
-                                    if self.operator_stack.is_empty() {
+                                }
+
+                                // if operator last on the stack is of equal precedence, then pop
+                                // until empty
+                                while let Some(op) = self.operator_stack.last().cloned() {
+                                    if op.precedence() == token.precedence()
+                                        && token.is_left_associative()
+                                    {
+                                        if let Some(t) = self.operator_stack.pop() {
+                                            self.output_stack.push(t)
+                                        }
+                                    } else {
                                         break;
                                     }
                                 }
                             }
                         }
+                        
+                        // push token onto operator stack
                         self.operator_stack.push(token.clone());
                         continue;
                     }
                     ";" => {
-                        while !self.operator_stack.is_empty() {
-                            if let Some(t) = self.operator_stack.pop() {
-                                self.output_stack.push(t.clone())
-                            }
+                        while let Some(tok) = self.operator_stack.pop() {
+                            self.output_stack.push(tok)
                         }
                     }
-                    "." => {
-
-                    }
+                    "." => {}
                     ":" => {
                         if let Some(t) = self.operator_stack.pop() {
                             self.output_stack.push(t.clone())
-                        }     
+                        }
                     }
                     "=" | "@" => self.operator_stack.push(token.clone()),
                     _ => {}
@@ -202,6 +205,8 @@ impl Parser {
         if self.debug {
             let mut printstack: String = "".to_string();
             for t in &self.output_stack {
+                //let ty = format!("{:?}", &t.token_type);
+                //printstack.push_str(&("[".to_owned() + &t.value + " : " + ty.as_str() + "]"));
                 printstack.push_str(&("[".to_owned() + &t.value + "]"));
                 printstack.push(' ');
             }
