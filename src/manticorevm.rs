@@ -132,7 +132,7 @@ impl ManitcoreVm {
                     ) {
 
 
-                        for var in list.block {
+                        for mut var in list.block {
                             let mut parser = Parser::new();
                             if self.debug {
                                 parser.debug = true
@@ -143,7 +143,15 @@ impl ManitcoreVm {
                                 vm.debug = true
                             }
                             vm.heap = self.heap.clone();
-                            vm.heap.insert(ident.value.clone(), var);
+
+                            if let Some(p) = &ident.proxy {
+                                var.proxy = Some(p.clone());
+                                vm.heap.insert(p.clone(), var.clone());
+                            } else {
+                                var.proxy = Some(ident.value.clone());
+                                vm.heap.insert(ident.value.clone(), var.clone());
+                            }
+
                             vm.execute();
                             self.heap = vm.heap.clone();
                         }
