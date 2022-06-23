@@ -124,7 +124,91 @@ impl ManitcoreVm {
                         )
                     };
                 }
-                // Clears out the heap
+                "for" => {
+                    if let (Some(block),Some(list), Some(ident)) = (
+                        self.execution_stack.pop(),
+                        self.execution_stack.pop(),
+                        self.execution_stack.pop()
+                    ) {
+
+
+                        for var in list.block {
+                            let mut parser = Parser::new();
+                            if self.debug {
+                                parser.debug = true
+                            }
+                            let shunted = parser.shunt(&block.block).clone();
+                            let mut vm = ManitcoreVm::new(&shunted, &block.value);
+                            if self.debug {
+                                vm.debug = true
+                            }
+                            vm.heap = self.heap.clone();
+                            vm.heap.insert(ident.value.clone(), var);
+                            vm.execute();
+                            self.heap = vm.heap.clone();
+                        }
+
+                    }
+
+                },
+                "range" => {
+                    if let (Some(end), Some(start)) = (
+                        self.execution_stack.pop(),
+                        self.execution_stack.pop()
+                    ) {
+                        let mut s: usize = 0;
+                        let mut e: usize = 0;
+
+                        if let Ok(v) = start.value.parse() {
+                            s = v
+                        } else {
+                            print_error(
+                                "expected a number",
+                                i.line_number,
+                                i.row,
+                                &self.file,
+                                &self.last_instruction,
+                            )
+                        }
+                        if let Ok(v) = end.value.parse() {
+                            e = v
+                        } else {
+                            print_error(
+                                "expected a number",
+                                i.line_number,
+                                i.row,
+                                &self.file,
+                                &self.last_instruction,
+                            )
+                        }
+
+                        let mut new_list: Vec<Token> = Vec::new();
+
+                        for x in s..=e {
+                            new_list.push(Token {
+                                proxy: None,
+                                token_type: TokenTypes::Number,
+                                value: x.to_string(),
+                                block: vec![],
+                                line_number: 0,
+                                row: 0,
+                            })
+                        }
+
+  
+                        self.execution_stack.push(
+                            Token {
+                                proxy: None,
+                                token_type: TokenTypes::List,
+                                value: "list".to_string(),
+                                block: new_list.clone(),
+                                line_number: 0,
+                                row: 0,
+                            }
+                        )
+                        
+                    }
+                }
                 "shc" => self.heap.clear(),
                 "pop" => if let Some(_t) = self.execution_stack.pop() {},
                 // Used to tie more than 1 token at a time from the stack

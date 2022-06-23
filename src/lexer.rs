@@ -42,6 +42,10 @@ fn manticore_functions() -> Vec<String> {
         "exit".to_string(),
         // math functions
         "neg".to_string(),
+        // list functions
+        "range".to_string(),
+        // loop functions
+        "for".to_string()
     ]
 }
 
