@@ -1,0 +1,40 @@
+var(
+    square: {
+        set(x) x:*x
+    },
+    abs:    {
+        set(x)
+        if((x: < 0)
+            {neg(x)}
+            {x}
+        )
+    },
+    sum: {
+        set(list)
+        var(sum: 0)
+        for(x: list: {
+            var(sum: (x: + sum))
+        })
+        sum
+    },
+    max: {
+        set(x: y)
+        if((x: > y)
+            {x}
+            {y}
+        )
+    },
+    min: {
+        set(x: y)
+        if((x: < y)
+            {x}
+            {y}
+        )
+    },
+    clamp: let(
+        {
+            set(lower: val: upper)
+            lower: val: upper: min @: max @:
+        }
+    )
+)
