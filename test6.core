@@ -1,0 +1,17 @@
+person: is { 
+    set(name: age: height)
+    greet:  is let( {println(name)} );
+    is_tall: is let( {println(height)} );
+    self
+};
+
+
+x: is 10;
+cowboy: is person("bingo" 28 5.7);
+
+
+
+cowboy.greet()
+cowboy.is_tall()
+
+println(x)

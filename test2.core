@@ -1,0 +1,71 @@
+## all about functions!
+# create functions
+
+var(square: {set(x) (x:*x)})
+println(( square(20) + 20 ) * 2)
+
+
+# pass functions
+var(mysquare: square)
+println( mysquare(20) )
+
+
+# pass functions as parameters 
+var(
+    dothing: {
+        set(x: y: z) 
+        if((x: = "one") {y()})
+        if((x: = "two") {z()})
+    }
+)
+
+var(
+    item1: {println("one executed")},
+    item2: {println("two executed")},
+    test: "one"
+)
+
+dothing(test: item1: item2)
+
+
+# create functions from functions
+var(
+    myfunc: {
+        set(x)
+        let(
+            {set(y) print(x , y: ,  "\n")}
+        )
+    },
+    coolifier: myfunc("cool "),
+    goofifier: myfunc("GOOOFY ")
+)
+
+coolifier("man that cray")
+goofifier("man LOL")
+
+# have multiple function returns or calls
+var(callfunction: {
+    set(x) 
+    ret(
+        x: one: {println("you chose this path!")},
+        x: 3 {println("this is wierd")},
+        x: "hey" {println("hey back!")}
+    )
+})
+
+call(callfunction(one)))
+
+var(
+    fib: {
+        set(num)
+        var(sum: 0)
+        for(x: range(1 num:) {
+            var(sum: (sum:+x))
+        })
+        sum
+    }
+)
+# loop(100 {println(fib(10))})
+
+var(x: 20)
+println(x: + 5)
