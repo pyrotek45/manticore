@@ -4,7 +4,7 @@ use crate::{
 };
 
 pub struct Lexer {
-    source: String,
+    pub source: String,
     buffer: String,
     line_number: usize,
     row: usize,
@@ -25,6 +25,7 @@ fn manticore_functions() -> Vec<String> {
         // block control
         "call".to_string(),
         "@".to_string(),
+        ".".to_string(),
         "ret".to_string(),
         "let".to_string(),
         // stack functions
@@ -37,7 +38,8 @@ fn manticore_functions() -> Vec<String> {
         "concat".to_string(),
         // heap control
         "set".to_string(),
-        "tie".to_string(),
+        "var".to_string(),
+        "is".to_string(),
         // basic repl control
         "exit".to_string(),
         // math functions
@@ -45,7 +47,19 @@ fn manticore_functions() -> Vec<String> {
         // list functions
         "range".to_string(),
         // loop functions
-        "for".to_string()
+        "for".to_string(),
+        "loop".to_string(),
+        // url
+        "run_url".to_string(),
+        "store_url".to_string(),
+        "import_url".to_string(),
+        // import
+        "import".to_string(),
+        "store_import".to_string(),
+        // os control
+        "command".to_string(),
+        // vm function
+        "end".to_string(),
     ]
 }
 
@@ -137,6 +151,7 @@ impl Lexer {
                         proxy: None,
                     });
                 }
+
                 // If none of the others, return an identifier
                 return Some(Token {
                     token_type: TokenTypes::Identifier,
@@ -252,10 +267,13 @@ impl Lexer {
                         self.buffer.clear();
                     }
                 }
+                '.' => {
+                    self.buffer.push(c);
+                }
 
                 // Symbols
                 '+' | '-' | '*' | '/' | '(' | ')' | '<' | '>' | '`' | '~' | '@' | '$' | '%'
-                | '^' | '&' | ',' | '?' | ';' | ':' | '=' | '.' => {
+                | '^' | '&' | ',' | '?' | ';' | ':' | '=' => {
                     if let Some(t) = self.check_token() {
                         if let Some(vec_last) = self.block_stack.last_mut() {
                             vec_last.push(t)
