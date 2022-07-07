@@ -9,6 +9,15 @@ where
     let file = std::fs::File::open(filename)?;
     Ok(std::io::BufRead::lines(std::io::BufReader::new(file)))
 }
+pub fn trim_newline(s: &mut String) -> String {
+    if s.ends_with('\n') {
+        s.pop();
+        if s.ends_with('\r') {
+            s.pop();
+        }
+    }
+    s.to_string()
+}
 
 pub fn is_string_number(data: &str) -> bool {
     let mut deci: bool = false;

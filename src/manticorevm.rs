@@ -1,11 +1,12 @@
-use std::collections::HashMap;
+use rand::Rng;
 use std::process::Command;
+use std::{collections::HashMap, io::Write};
 
 use crate::{
-    lexer::{self, Lexer},
+    lexer::{self},
     parser::Parser,
-    string_utils::print_error,
-    token::{self, Token, TokenTypes},
+    string_utils::{is_string_number, print_error, trim_newline},
+    token::{Token, TokenTypes},
 };
 
 pub struct ManitcoreVm {
@@ -14,6 +15,7 @@ pub struct ManitcoreVm {
     last_instruction: String,
     stack_set: usize,
     file: String,
+    exit_loop: bool,
     pub debug: bool,
     heap: HashMap<String, Token>,
 }
@@ -53,6 +55,7 @@ impl ManitcoreVm {
             debug: false,
             heap: HashMap::new(),
             stack_set: 0,
+            exit_loop: false,
         }
     }
 
@@ -166,9 +169,34 @@ impl ManitcoreVm {
                     &self.file,
                     &self.last_instruction,
                 ),
-                "end" =>{
-                    break;
-                },
+                "readln" => {
+                    let mut line = String::new();
+                    std::io::stdin().read_line(&mut line).unwrap();
+                    let line = trim_newline(&mut line);
+
+                    if is_string_number(&line) {
+                        self.execution_stack.push(Token {
+                            proxy: None,
+                            token_type: TokenTypes::Number,
+                            value: line.to_string(),
+                            block: vec![],
+                            line_number: 0,
+                            row: 0,
+                        })
+                    } else {
+                        self.execution_stack.push(Token {
+                            proxy: None,
+                            token_type: TokenTypes::String,
+                            value: line.to_string(),
+                            block: vec![],
+                            line_number: 0,
+                            row: 0,
+                        })
+                    }
+                }
+                "end" => {
+                    self.exit_loop = true;
+                }
                 "command" => {
                     if let (Some(a), Some(b)) =
                         (self.execution_stack.pop(), self.execution_stack.pop())
@@ -176,7 +204,7 @@ impl ManitcoreVm {
                         let mut cargs = vec![];
                         for arg in a.block {
                             cargs.push(arg.value.clone())
-                        } 
+                        }
 
                         Command::new(&b.value)
                             .args(cargs)
@@ -323,6 +351,217 @@ impl ManitcoreVm {
                         }
                     }
                 }
+                "sqrt" => {
+                    if let Some(a) = self.execution_stack.pop() {
+                        let mut f: f32 = 0.0;
+
+                        if let Ok(v) = a.value.parse() {
+                            f = v
+                        } else {
+                            print_error(
+                                "expected a number",
+                                i.line_number,
+                                i.row,
+                                &self.file,
+                                &self.last_instruction,
+                            )
+                        }
+
+                        self.execution_stack.push(Token {
+                            token_type: TokenTypes::Number,
+                            value: (f.sqrt()).to_string(),
+                            line_number: 0,
+                            row: 0,
+                            block: vec![],
+                            proxy: None,
+                        })
+                    } else {
+                        print_error(
+                            "not enough arguments for sqrt",
+                            i.line_number,
+                            i.row,
+                            &self.file,
+                            &self.last_instruction,
+                        )
+                    };
+                }
+                "randomf" => {
+                    if let (Some(a), Some(b)) =
+                        (self.execution_stack.pop(), self.execution_stack.pop())
+                    {
+                        let mut f: f32 = 0.0;
+                        let mut s: f32 = 0.0;
+
+                        if let Ok(v) = a.value.parse() {
+                            f = v
+                        } else {
+                            print_error(
+                                "expected a number",
+                                i.line_number,
+                                i.row,
+                                &self.file,
+                                &self.last_instruction,
+                            )
+                        }
+
+                        if let Ok(v) = b.value.parse() {
+                            s = v
+                        } else {
+                            print_error(
+                                "expected a number",
+                                i.line_number,
+                                i.row,
+                                &self.file,
+                                &self.last_instruction,
+                            )
+                        }
+
+                        if s <= f {
+                            let mut rng = rand::thread_rng();
+
+                            self.execution_stack.push(Token {
+                                token_type: TokenTypes::Number,
+                                value: (rng.gen_range(s..=f)).to_string(),
+                                line_number: 0,
+                                row: 0,
+                                block: vec![],
+                                proxy: None,
+                            })
+                        } else {
+                            let mut rng = rand::thread_rng();
+
+                            self.execution_stack.push(Token {
+                                token_type: TokenTypes::Number,
+                                value: (rng.gen_range(f..=s)).to_string(),
+                                line_number: 0,
+                                row: 0,
+                                block: vec![],
+                                proxy: None,
+                            })
+                        }
+                    } else {
+                        print_error(
+                            "not enough arguments for randomf",
+                            i.line_number,
+                            i.row,
+                            &self.file,
+                            &self.last_instruction,
+                        )
+                    };
+                }
+                "random_int" => {
+                    if let (Some(a), Some(b)) =
+                        (self.execution_stack.pop(), self.execution_stack.pop())
+                    {
+                        let mut f: i32 = 0;
+                        let mut s: i32 = 0;
+
+                        if let Ok(v) = a.value.parse() {
+                            f = v
+                        } else {
+                            print_error(
+                                "expected a number",
+                                i.line_number,
+                                i.row,
+                                &self.file,
+                                &self.last_instruction,
+                            )
+                        }
+
+                        if let Ok(v) = b.value.parse() {
+                            s = v
+                        } else {
+                            print_error(
+                                "expected a number",
+                                i.line_number,
+                                i.row,
+                                &self.file,
+                                &self.last_instruction,
+                            )
+                        }
+
+                        if s <= f {
+                            let mut rng = rand::thread_rng();
+
+                            self.execution_stack.push(Token {
+                                token_type: TokenTypes::Number,
+                                value: (rng.gen_range(s..=f)).to_string(),
+                                line_number: 0,
+                                row: 0,
+                                block: vec![],
+                                proxy: None,
+                            })
+                        } else {
+                            let mut rng = rand::thread_rng();
+
+                            self.execution_stack.push(Token {
+                                token_type: TokenTypes::Number,
+                                value: (rng.gen_range(f..=s)).to_string(),
+                                line_number: 0,
+                                row: 0,
+                                block: vec![],
+                                proxy: None,
+                            })
+                        }
+                    } else {
+                        print_error(
+                            "not enough arguments for random_int",
+                            i.line_number,
+                            i.row,
+                            &self.file,
+                            &self.last_instruction,
+                        )
+                    };
+                }
+                "pow" => {
+                    if let (Some(a), Some(b)) =
+                        (self.execution_stack.pop(), self.execution_stack.pop())
+                    {
+                        let mut f: f32 = 0.0;
+                        let mut s: f32 = 0.0;
+
+                        if let Ok(v) = a.value.parse() {
+                            f = v
+                        } else {
+                            print_error(
+                                "expected a number",
+                                i.line_number,
+                                i.row,
+                                &self.file,
+                                &self.last_instruction,
+                            )
+                        }
+
+                        if let Ok(v) = b.value.parse() {
+                            s = v
+                        } else {
+                            print_error(
+                                "expected a number",
+                                i.line_number,
+                                i.row,
+                                &self.file,
+                                &self.last_instruction,
+                            )
+                        }
+
+                        self.execution_stack.push(Token {
+                            token_type: TokenTypes::Number,
+                            value: (s.powf(f)).to_string(),
+                            line_number: 0,
+                            row: 0,
+                            block: vec![],
+                            proxy: None,
+                        })
+                    } else {
+                        print_error(
+                            "not enough arguments for pow",
+                            i.line_number,
+                            i.row,
+                            &self.file,
+                            &self.last_instruction,
+                        )
+                    };
+                }
                 "neg" => {
                     if let Some(a) = self.execution_stack.pop() {
                         let mut f: f32 = 0.0;
@@ -385,32 +624,23 @@ impl ManitcoreVm {
                     }
                 }
                 "loop" => {
-                    if let (Some(block), Some(num)) =
-                        (self.execution_stack.pop(), self.execution_stack.pop())
-                    {
-                        if let Ok(v) = num.value.parse() {
-                            for _ in 1..=v {
-                                let mut parser = Parser::new();
-                                if self.debug {
-                                    parser.debug = true
-                                }
-                                let shunted = parser.shunt(&block.block).clone();
-                                let mut vm = ManitcoreVm::new(&shunted, &block.value);
-                                if self.debug {
-                                    vm.debug = true
-                                }
-                                vm.heap = self.heap.clone();
-                                vm.execute();
-                                self.heap = vm.heap.clone();
+                    if let Some(block) = self.execution_stack.pop() {
+                        loop {
+                            let mut parser = Parser::new();
+                            if self.debug {
+                                parser.debug = true
                             }
-                        } else {
-                            print_error(
-                                "expected a number",
-                                i.line_number,
-                                i.row,
-                                &self.file,
-                                &self.last_instruction,
-                            )
+                            let shunted = parser.shunt(&block.block).clone();
+                            let mut vm = ManitcoreVm::new(&shunted, &block.value);
+                            if self.debug {
+                                vm.debug = true
+                            }
+                            vm.heap = self.heap.clone();
+                            vm.execute();
+                            self.heap = vm.heap.clone();
+                            if vm.exit_loop {
+                                break;
+                            }
                         }
                     }
                 }
@@ -521,7 +751,6 @@ impl ManitcoreVm {
                         }
                     }
 
-
                     // Tie each value into the heap using the tokens poped
                     for values in variable_stack {
                         self.stack_set += 1;
@@ -577,22 +806,51 @@ impl ManitcoreVm {
                 // This function will pop off a block and execute it using the outer scope heap and stack
                 "let" => {
                     if let Some(a) = self.execution_stack.pop() {
-                        let mut new_stack = vec![];
-
-                        for t in a.block {
-                            if let Some(tok) = self.heap.get(&t.value) {
-                                new_stack.push(tok.clone())
-                            } else {
-                                new_stack.push(t)
-                            }
+                        let mut core_self = vec![];
+                        for (key, value) in &self.heap {
+                            core_self.push(Token {
+                                proxy: None,
+                                token_type: TokenTypes::Function,
+                                value: "var".to_string(),
+                                block: vec![],
+                                line_number: 0,
+                                row: 0,
+                            });
+                            core_self.push(Token {
+                                proxy: None,
+                                token_type: TokenTypes::Identifier,
+                                value: key.to_string(),
+                                block: vec![],
+                                line_number: 0,
+                                row: 0,
+                            });
+                            core_self.push(Token {
+                                proxy: None,
+                                token_type: TokenTypes::Symbol,
+                                value: ":".to_string(),
+                                block: vec![],
+                                line_number: 0,
+                                row: 0,
+                            });
+                            core_self.push(value.clone());
+                            core_self.push(Token {
+                                proxy: None,
+                                token_type: TokenTypes::Symbol,
+                                value: ";".to_string(),
+                                block: vec![],
+                                line_number: 0,
+                                row: 0,
+                            });
                         }
+
+                        core_self.append(&mut a.block.clone());
 
                         self.execution_stack.push(Token {
                             token_type: TokenTypes::Block,
                             value: a.value.clone(),
                             line_number: 0,
                             row: 0,
-                            block: new_stack.clone(),
+                            block: core_self.clone(),
                             proxy: a.proxy.clone(),
                         });
                     } else {
@@ -684,9 +942,12 @@ impl ManitcoreVm {
                                 vm.heap = self.heap.clone();
                                 vm.execute();
                                 self.heap = vm.heap.clone();
-                                                        // Copy the last item to return from inside the vm to the outside
+                                // Copy the last item to return from inside the vm to the outside
                                 if let Some(return_value) = vm.execution_stack.pop() {
                                     self.execution_stack.push(return_value)
+                                }
+                                if vm.exit_loop {
+                                    self.exit_loop = true;
                                 }
                             }
                         } else if let Some(c) = self.execution_stack.pop() {
@@ -707,6 +968,9 @@ impl ManitcoreVm {
                                     if let Some(return_value) = vm.execution_stack.pop() {
                                         self.execution_stack.push(return_value)
                                     }
+                                    if vm.exit_loop {
+                                        self.exit_loop = true;
+                                    }
                                 } else {
                                     let mut parser = Parser::new();
                                     if self.debug {
@@ -722,6 +986,9 @@ impl ManitcoreVm {
                                     self.heap = vm.heap.clone();
                                     if let Some(return_value) = vm.execution_stack.pop() {
                                         self.execution_stack.push(return_value)
+                                    }
+                                    if vm.exit_loop {
+                                        self.exit_loop = true;
                                     }
                                 }
                             }
@@ -923,6 +1190,141 @@ impl ManitcoreVm {
                     } else {
                         print_error(
                             "not enough arguments for =",
+                            i.line_number,
+                            i.row,
+                            &self.file,
+                            &self.last_instruction,
+                        )
+                    };
+                }
+                "not" => {
+                    // todo: does not support blocks atm
+                    if let Some(a) = self.execution_stack.pop() {
+                        let mut f: bool = false;
+
+                        if let Ok(v) = a.value.parse() {
+                            f = v
+                        } else {
+                            print_error(
+                                "expected a normal token",
+                                i.line_number,
+                                i.row,
+                                &self.file,
+                                &self.last_instruction,
+                            )
+                        }
+
+                        self.execution_stack.push(Token {
+                            token_type: TokenTypes::Bool,
+                            value: (!f).to_string(),
+                            line_number: 0,
+                            row: 0,
+                            block: vec![],
+                            proxy: None,
+                        })
+                    } else {
+                        print_error(
+                            "not enough arguments for not",
+                            i.line_number,
+                            i.row,
+                            &self.file,
+                            &self.last_instruction,
+                        )
+                    };
+                }
+                "and" => {
+                    // todo: does not support blocks atm
+                    if let (Some(a), Some(b)) =
+                        (self.execution_stack.pop(), self.execution_stack.pop())
+                    {
+                        let mut f: bool = false;
+                        let mut s: bool = false;
+
+                        if let Ok(v) = a.value.parse() {
+                            f = v
+                        } else {
+                            print_error(
+                                "expected a normal token",
+                                i.line_number,
+                                i.row,
+                                &self.file,
+                                &self.last_instruction,
+                            )
+                        }
+
+                        if let Ok(v) = b.value.parse() {
+                            s = v
+                        } else {
+                            print_error(
+                                "expected a normal token",
+                                i.line_number,
+                                i.row,
+                                &self.file,
+                                &self.last_instruction,
+                            )
+                        }
+
+                        self.execution_stack.push(Token {
+                            token_type: TokenTypes::Bool,
+                            value: (f && s).to_string(),
+                            line_number: 0,
+                            row: 0,
+                            block: vec![],
+                            proxy: None,
+                        })
+                    } else {
+                        print_error(
+                            "not enough arguments for and",
+                            i.line_number,
+                            i.row,
+                            &self.file,
+                            &self.last_instruction,
+                        )
+                    };
+                }
+                "or" => {
+                    // todo: does not support blocks atm
+                    if let (Some(a), Some(b)) =
+                        (self.execution_stack.pop(), self.execution_stack.pop())
+                    {
+                        let mut f: bool = false;
+                        let mut s: bool = false;
+
+                        if let Ok(v) = a.value.parse() {
+                            f = v
+                        } else {
+                            print_error(
+                                "expected a normal token",
+                                i.line_number,
+                                i.row,
+                                &self.file,
+                                &self.last_instruction,
+                            )
+                        }
+
+                        if let Ok(v) = b.value.parse() {
+                            s = v
+                        } else {
+                            print_error(
+                                "expected a normal token",
+                                i.line_number,
+                                i.row,
+                                &self.file,
+                                &self.last_instruction,
+                            )
+                        }
+
+                        self.execution_stack.push(Token {
+                            token_type: TokenTypes::Bool,
+                            value: (f || s).to_string(),
+                            line_number: 0,
+                            row: 0,
+                            block: vec![],
+                            proxy: None,
+                        })
+                    } else {
+                        print_error(
+                            "not enough arguments for or",
                             i.line_number,
                             i.row,
                             &self.file,
@@ -1242,6 +1644,9 @@ impl ManitcoreVm {
                     } else {
                         println!()
                     };
+                }
+                "flush" => {
+                    std::io::stdout().flush().unwrap();
                 }
                 "newline" => {}
                 _ => {}

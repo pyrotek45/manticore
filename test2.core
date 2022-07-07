@@ -33,7 +33,7 @@ var(
     myfunc: {
         set(x)
         let(
-            {set(y) print(x , y: ,  "\n")}
+            {set(y) print(x: , y: ,  "\n")}
         )
     },
     coolifier: myfunc("cool "),

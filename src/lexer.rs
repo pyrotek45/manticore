@@ -20,6 +20,7 @@ fn manticore_functions() -> Vec<String> {
         // basic output
         "print".to_string(),
         "println".to_string(),
+        "flush".to_string(),
         // program flow
         "if".to_string(),
         // block control
@@ -60,6 +61,18 @@ fn manticore_functions() -> Vec<String> {
         "command".to_string(),
         // vm function
         "end".to_string(),
+        // math stuff
+        "sqrt".to_string(),
+        "pow".to_string(),
+        // boolean op
+        "and".to_string(),
+        "or".to_string(),
+        "not".to_string(),
+        // input
+        "readln".to_string(),
+        // random function
+        "randomf".to_string(),
+        "random_int".to_string(),
     ]
 }
 
