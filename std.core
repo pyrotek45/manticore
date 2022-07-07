@@ -1,0 +1,8 @@
+var(
+    readln_prompt: {
+        set(prompt)
+        print(prompt)
+        flush()
+        readln
+    }
+)
