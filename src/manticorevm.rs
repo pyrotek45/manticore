@@ -664,6 +664,22 @@ impl ManitcoreVm {
                     )
                 }
             }
+            "append" => {
+                if let (Some(mut a), Some(mut b)) =
+                    (self.execution_stack.pop(), self.execution_stack.pop())
+                {
+                    b.block.append(&mut a.block);
+                    self.execution_stack.push(b)
+                } else {
+                    print_error(
+                        format!("not enough arguments for {}", i.value).as_str(),
+                        i.line_number,
+                        i.row,
+                        &self.file,
+                        &self.last_instruction,
+                    )
+                }
+            }
             "push" => {
                 if let (Some(a), Some(mut b)) =
                     (self.execution_stack.pop(), self.execution_stack.pop())

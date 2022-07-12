@@ -83,6 +83,7 @@ fn manticore_functions() -> Vec<String> {
         "pop".to_string(),
         "insert".to_string(),
         "remove".to_string(),
+        "append".to_string(),
     ]
 }
 
