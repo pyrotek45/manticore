@@ -14,6 +14,7 @@ pub struct Lexer {
     pub block_stack: Vec<Vec<Token>>,
     function_keywords: Vec<String>,
     bool_keywords: Vec<String>,
+    is_skip: bool,
 }
 fn manticore_functions() -> Vec<String> {
     vec![
@@ -26,25 +27,27 @@ fn manticore_functions() -> Vec<String> {
         // block control
         "call".to_string(),
         "@".to_string(),
-        ".".to_string(),
+        //".".to_string(),
         "ret".to_string(),
         "let".to_string(),
         // stack functions
         "dup".to_string(),
         "rev".to_string(),
         "shc".to_string(),
-        "pop".to_string(),
+        "rm".to_string(),
         "sec".to_string(),
         // string function
         "concat".to_string(),
         // heap control
         "set".to_string(),
         "var".to_string(),
-        "is".to_string(),
+        "=".to_string(),
         // basic repl control
         "exit".to_string(),
         // math functions
         "neg".to_string(),
+        "sqrt".to_string(),
+        "pow".to_string(),
         // list functions
         "range".to_string(),
         // loop functions
@@ -60,19 +63,26 @@ fn manticore_functions() -> Vec<String> {
         // os control
         "command".to_string(),
         // vm function
-        "end".to_string(),
-        // math stuff
-        "sqrt".to_string(),
-        "pow".to_string(),
+        "break".to_string(),
         // boolean op
         "and".to_string(),
         "or".to_string(),
         "not".to_string(),
+        "equ".to_string(),
+        "gtr".to_string(),
+        "lss".to_string(),
         // input
         "readln".to_string(),
         // random function
         "randomf".to_string(),
         "random_int".to_string(),
+        // token
+        "exist".to_string(),
+        // list commands
+        "push".to_string(),
+        "pop".to_string(),
+        "insert".to_string(),
+        "remove".to_string(),
     ]
 }
 
@@ -91,6 +101,7 @@ impl Lexer {
                 function_keywords: manticore_functions(),
                 bool_keywords: vec!["true".to_string(), "false".to_string()],
                 is_parsing_comment: false,
+                is_skip: false,
             }
         } else {
             println!(
@@ -114,6 +125,7 @@ impl Lexer {
             function_keywords: manticore_functions(),
             bool_keywords: vec!["true".to_string(), "false".to_string()],
             is_parsing_comment: false,
+            is_skip: false,
         }
     }
 
@@ -184,8 +196,15 @@ impl Lexer {
         // Parsing strings double quote
         for c in self.source.chars() {
             if self.is_parsing_stringdq {
-                if c != '"' {
+                if c == '\\' {
+                    self.is_skip = true;
+                    continue;
+                }
+                if c != '"' || self.is_skip {
                     self.buffer.push(c);
+                    if self.is_skip {
+                        self.is_skip = false;
+                    }
                     continue;
                 } else {
                     self.is_parsing_stringdq = false;
@@ -207,8 +226,15 @@ impl Lexer {
 
             // Parsing strings single quotes
             if self.is_parsing_stringsq {
-                if c != '\'' {
+                if c == '\\' {
+                    self.is_skip = true;
+                    continue;
+                }
+                if c != '\'' || self.is_skip {
                     self.buffer.push(c);
+                    if self.is_skip {
+                        self.is_skip = false;
+                    }
                     continue;
                 } else {
                     self.is_parsing_stringsq = false;
@@ -338,6 +364,17 @@ impl Lexer {
                     }
 
                     self.block_stack.push(vec![]);
+
+                    if let Some(vec_last) = self.block_stack.last_mut() {
+                        vec_last.push(Token {
+                            token_type: TokenTypes::Break,
+                            value: "break".to_string(),
+                            line_number: self.line_number,
+                            row: self.row,
+                            block: vec![],
+                            proxy: None,
+                        })
+                    }
                 }
 
                 '}' => {

@@ -1,7 +1,5 @@
 extern crate clap;
 extern crate colored;
-extern crate dym;
-extern crate rustyline;
 
 mod lexer;
 mod manticorevm;
@@ -12,6 +10,7 @@ mod token;
 use clap::*;
 use manticorevm::ManitcoreVm;
 use parser::Parser;
+
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
@@ -37,9 +36,35 @@ fn main() {
         )
         .get_matches();
 
+    //used for bundling code and interpreter to create single file
+    // let std = include_str!("../std.core");
+    // let program = include_str!("../test7.core");
+    // if !program.is_empty() {
+    //     let mut lexer = lexer::Lexer::new_from_string(std);
+    //     lexer.add_input(program);
+    //     // Parse the file into tokens
+    //     lexer.parse();
+    //     let mut parser = Parser::new();
+    //     if matches.is_present("DEBUG") {
+    //         parser.debug = true;
+    //     }
+
+    //     // Store now parsed tokens into a new list
+    //     let shunted = parser.shunt(&lexer.block_stack[0]).clone();
+    //     let mut vm = ManitcoreVm::new(&shunted, "");
+    //     if matches.is_present("DEBUG") {
+    //         vm.debug = true;
+    //     }
+
+    //     // Execute the vm using parsed token list
+    //     vm.execute();
+    //     std::process::exit(0)
+    // }
+
     // Repl or File
     if let Some(filename) = matches.value_of("FILE") {
         // Get filename from argument
+
         let mut lexer = lexer::Lexer::new_from_file(filename);
 
         // Parse the file into tokens
@@ -68,6 +93,8 @@ fn main() {
 
         let mut repl = String::new();
         let mut repl_debug: bool = false;
+        let mut vm = ManitcoreVm::new(&[], "");
+        let mut parser = Parser::new();
         loop {
             // Repl prompt
             let readline = rl.readline(">> ");
@@ -75,11 +102,11 @@ fn main() {
                 Ok(line) => {
                     // Rustlyline History support
                     rl.add_history_entry(line.as_str());
-                    repl.push_str(&(" ".to_owned() + &line));
+                    //repl.push_str(&(" ".to_owned() + &line));
 
                     // Create new parsing and lexing engine
-                    let mut parser = Parser::new();
-                    let mut lexer = lexer::Lexer::new_from_string(&repl);
+
+                    let mut lexer = lexer::Lexer::new_from_string(&line);
                     lexer.parse();
 
                     // Basic repl commands to check
@@ -99,16 +126,20 @@ fn main() {
                     };
 
                     // Shunt tokens and insert them into vm
+                    parser._clear();
                     let shunted = parser.shunt(&lexer.block_stack[0]).clone();
-                    let mut vm = ManitcoreVm::new(&shunted, &line);
 
                     // Enable vm debug
                     if repl_debug {
                         vm.debug = true;
                     }
 
-                    // Execute vm
-                    vm.execute();
+                    for i in shunted {
+                        vm.execute_token(&i);
+                        if vm.exit_loop {
+                            break;
+                        }
+                    }
                 }
                 Err(ReadlineError::Interrupted) => {
                     break;

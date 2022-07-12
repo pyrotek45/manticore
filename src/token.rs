@@ -7,9 +7,9 @@ pub enum TokenTypes {
     String,
     Symbol,
     Bool,
-    Knot,
     Break,
     List,
+    Nothing,
 }
 
 #[derive(Clone)]

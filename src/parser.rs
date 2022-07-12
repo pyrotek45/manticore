@@ -1,6 +1,9 @@
 use colored::Colorize;
 
-use crate::token::{Token, TokenTypes};
+use crate::{
+    string_utils::is_string_number,
+    token::{Token, TokenTypes},
+};
 
 pub struct Parser {
     pub operator_stack: Vec<Token>,
@@ -36,6 +39,10 @@ impl Parser {
                 self.output_stack.push(token.clone());
             }
 
+            if token.token_type == TokenTypes::Break {
+                self.output_stack.push(token.clone());
+            }
+
             // List go to output stack
             if token.token_type == TokenTypes::List {
                 self.output_stack.push(token.clone());
@@ -47,6 +54,7 @@ impl Parser {
                 self.output_stack.push(token.clone());
                 if let Some(last) = self.operator_stack.last().cloned() {
                     if last.value == "@" {
+                        self.operator_stack.pop();
                         self.output_stack.push(last)
                     }
                 }
@@ -54,7 +62,7 @@ impl Parser {
 
             // identifiers get passed to operator stack
             if token.token_type == TokenTypes::Identifier {
-                self.operator_stack.push(token.clone());
+                self.operator_stack.push(token.clone())
             }
 
             // Functions get passed to operator stack
@@ -80,8 +88,8 @@ impl Parser {
                                         self.output_stack.push(Token {
                                             token_type: TokenTypes::Symbol,
                                             value: "@".to_string(),
-                                            line_number: 0,
-                                            row: 0,
+                                            line_number: token.line_number,
+                                            row: token.row,
                                             block: vec![],
                                             proxy: None,
                                         })
@@ -93,22 +101,12 @@ impl Parser {
                         }
                     }
                     "(" => {
-                        // if last function is set, set break point
-                        if let Some(tok) = self.operator_stack.last() {
-                            if tok.value == "set" {
-                                self.output_stack.push(Token {
-                                    token_type: TokenTypes::Break,
-                                    value: "break".to_string(),
-                                    line_number: 0,
-                                    row: 0,
-                                    block: vec![],
-                                    proxy: None,
-                                })
-                            }
-                        }
                         self.operator_stack.push(token.clone());
                     }
                     ")" => {
+                        if let Some(last) = self.operator_stack.last() {
+                            if last.value == "(" {}
+                        }
                         // while the last item in the operator stack is not
                         // a "(", pop off items into output stack
                         while let Some(last) = self.operator_stack.pop() {
@@ -140,31 +138,44 @@ impl Parser {
                                         // [world] [hello]
                                         // Push first item
                                         if let Some(t) = list.pop() {
-                                            self.output_stack.push(Token {
-                                                token_type: TokenTypes::Identifier,
-                                                value: t.to_string(),
-                                                line_number: 0,
-                                                row: 0,
-                                                block: vec![],
-                                                proxy: None,
-                                            })
+                                            if !t.is_empty() {
+                                                self.output_stack.push(Token {
+                                                    token_type: TokenTypes::Identifier,
+                                                    value: t.to_string(),
+                                                    line_number: last.line_number,
+                                                    row: last.row,
+                                                    block: vec![],
+                                                    proxy: None,
+                                                });
+                                            }
                                         }
                                         list.reverse();
                                         // [world]
                                         for t in list {
-                                            self.output_stack.push(Token {
-                                                token_type: TokenTypes::Identifier,
-                                                value: t.to_string(),
-                                                line_number: 0,
-                                                row: 0,
-                                                block: vec![],
-                                                proxy: None,
-                                            });
+                                            if is_string_number(&t) {
+                                                self.output_stack.push(Token {
+                                                    token_type: TokenTypes::Number,
+                                                    value: t.to_string(),
+                                                    line_number: last.line_number,
+                                                    row: last.row,
+                                                    block: vec![],
+                                                    proxy: None,
+                                                });
+                                            } else {
+                                                self.output_stack.push(Token {
+                                                    token_type: TokenTypes::Identifier,
+                                                    value: t.to_string(),
+                                                    line_number: last.line_number,
+                                                    row: last.row,
+                                                    block: vec![],
+                                                    proxy: None,
+                                                });
+                                            }
                                             self.output_stack.push(Token {
                                                 token_type: TokenTypes::Symbol,
                                                 value: ".".to_string(),
-                                                line_number: 0,
-                                                row: 0,
+                                                line_number: last.line_number,
+                                                row: last.row,
                                                 block: vec![],
                                                 proxy: None,
                                             })
@@ -176,7 +187,6 @@ impl Parser {
                                 }
                                 self.output_stack.push(last)
                             } else {
-                                //self.operator_stack.push(last);
                                 break;
                             }
                         }
@@ -215,32 +225,45 @@ impl Parser {
                                         // [world] [hello]
                                         // Push first item
                                         if let Some(t) = list.pop() {
-                                            self.output_stack.push(Token {
-                                                token_type: TokenTypes::Identifier,
-                                                value: t.to_string(),
-                                                line_number: 0,
-                                                row: 0,
-                                                block: vec![],
-                                                proxy: None,
-                                            })
+                                            if !t.is_empty() {
+                                                self.output_stack.push(Token {
+                                                    token_type: TokenTypes::Identifier,
+                                                    value: t.to_string(),
+                                                    line_number: last.line_number,
+                                                    row: last.row,
+                                                    block: vec![],
+                                                    proxy: None,
+                                                });
+                                            }
                                         }
 
                                         list.reverse();
                                         // [world]
                                         for t in list {
-                                            self.output_stack.push(Token {
-                                                token_type: TokenTypes::Identifier,
-                                                value: t.to_string(),
-                                                line_number: 0,
-                                                row: 0,
-                                                block: vec![],
-                                                proxy: None,
-                                            });
+                                            if is_string_number(&t) {
+                                                self.output_stack.push(Token {
+                                                    token_type: TokenTypes::Number,
+                                                    value: t.to_string(),
+                                                    line_number: last.line_number,
+                                                    row: last.row,
+                                                    block: vec![],
+                                                    proxy: None,
+                                                });
+                                            } else {
+                                                self.output_stack.push(Token {
+                                                    token_type: TokenTypes::Identifier,
+                                                    value: t.to_string(),
+                                                    line_number: last.line_number,
+                                                    row: last.row,
+                                                    block: vec![],
+                                                    proxy: None,
+                                                });
+                                            }
                                             self.output_stack.push(Token {
                                                 token_type: TokenTypes::Symbol,
                                                 value: ".".to_string(),
-                                                line_number: 0,
-                                                row: 0,
+                                                line_number: last.line_number,
+                                                row: last.row,
                                                 block: vec![],
                                                 proxy: None,
                                             })
@@ -248,8 +271,8 @@ impl Parser {
                                         self.output_stack.push(Token {
                                             token_type: TokenTypes::Symbol,
                                             value: "@".to_string(),
-                                            line_number: 0,
-                                            row: 0,
+                                            line_number: last.line_number,
+                                            row: last.row,
                                             block: vec![],
                                             proxy: None,
                                         })
@@ -258,8 +281,8 @@ impl Parser {
                                         self.output_stack.push(Token {
                                             token_type: TokenTypes::Symbol,
                                             value: "@".to_string(),
-                                            line_number: 0,
-                                            row: 0,
+                                            line_number: token.line_number,
+                                            row: token.row,
                                             block: vec![],
                                             proxy: None,
                                         })
@@ -345,31 +368,45 @@ impl Parser {
                                         // [world] [hello]
                                         // Push first item
                                         if let Some(t) = list.pop() {
-                                            self.output_stack.push(Token {
-                                                token_type: TokenTypes::Identifier,
-                                                value: t.to_string(),
-                                                line_number: 0,
-                                                row: 0,
-                                                block: vec![],
-                                                proxy: None,
-                                            })
+                                            if !t.is_empty() {
+                                                self.output_stack.push(Token {
+                                                    token_type: TokenTypes::Identifier,
+                                                    value: t.to_string(),
+                                                    line_number: last.line_number,
+                                                    row: last.row,
+                                                    block: vec![],
+                                                    proxy: None,
+                                                })
+                                            }
                                         }
                                         // [world]
                                         list.reverse();
                                         for t in list {
-                                            self.output_stack.push(Token {
-                                                token_type: TokenTypes::Identifier,
-                                                value: t.to_string(),
-                                                line_number: 0,
-                                                row: 0,
-                                                block: vec![],
-                                                proxy: None,
-                                            });
+                                            if is_string_number(&t) {
+                                                self.output_stack.push(Token {
+                                                    token_type: TokenTypes::Number,
+                                                    value: t.to_string(),
+                                                    line_number: last.line_number,
+                                                    row: last.row,
+                                                    block: vec![],
+                                                    proxy: None,
+                                                });
+                                            } else {
+                                                self.output_stack.push(Token {
+                                                    token_type: TokenTypes::Identifier,
+                                                    value: t.to_string(),
+                                                    line_number: last.line_number,
+                                                    row: last.row,
+                                                    block: vec![],
+                                                    proxy: None,
+                                                });
+                                            }
+
                                             self.output_stack.push(Token {
                                                 token_type: TokenTypes::Symbol,
                                                 value: ".".to_string(),
-                                                line_number: 0,
-                                                row: 0,
+                                                line_number: last.line_number,
+                                                row: last.row,
                                                 block: vec![],
                                                 proxy: None,
                                             })
@@ -383,6 +420,7 @@ impl Parser {
                         }
                     }
                     "=" | "@" | ">" | "<" => self.operator_stack.push(token.clone()),
+                    "~" | "?" => self.output_stack.push(token.clone()),
                     _ => {}
                 }
             }
@@ -395,9 +433,9 @@ impl Parser {
         if self.debug {
             let mut printstack: String = "".to_string();
             for t in &self.output_stack {
-                //let ty = format!("{:?}", &t.token_type);
-                //printstack.push_str(&("[".to_owned() + &t.value + " : " + ty.as_str() + "]"));
-                printstack.push_str(&("[".to_owned() + &t.value + "]"));
+                let ty = format!("{:?}", &t.token_type);
+                printstack.push_str(&("[".to_owned() + &t.value + " -> " + ty.as_str() + "]"));
+                //printstack.push_str(&("[".to_owned() + &t.value + "]"));
                 printstack.push(' ');
             }
             println!("STACK: {}", &printstack.bright_green());

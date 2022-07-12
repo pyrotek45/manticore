@@ -1,8 +1,34 @@
-var(
-    readln_prompt: {
-        set(prompt)
-        print(prompt)
-        flush()
-        readln
-    }
-)
+# IO handling
+readln_prompt: = {
+    prompt: ~
+    print(prompt)
+    flush()
+    readln
+};
+
+# comparisons 
+neq: = {x: y: ~ not( equ(x: y) )};
+
+geq: = {x: y: ~ if or(gtr(x: y) equ(x: y)) {true} {false};};
+
+leq: = {x: y: ~ if or(lss(x: y) equ(x: y)) {true} {false};};
+
+# math
+square: = {x: ~ x:*x};
+
+abs: = {x: ~ if lss(x: 0) {neg(x)} {x};};
+
+sum: = {
+    list: ~
+    sum: = 0;
+    for x: list: {
+        sum: = (x: + sum);
+    };
+    sum
+};
+
+max: = {x: y: ~ if gtr(x:  y) {x} {y};};
+
+min: = {x: y: ~ if lss(x: < y) {x} {y};};
+
+clamp: = let({lower: val: upper: ~ max(lower: min(val: upper))});

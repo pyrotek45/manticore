@@ -1,3 +1,5 @@
+use std::process::exit;
+
 use colored::Colorize;
 
 pub fn read_lines<P>(
@@ -21,6 +23,9 @@ pub fn trim_newline(s: &mut String) -> String {
 
 pub fn is_string_number(data: &str) -> bool {
     let mut deci: bool = false;
+    if data.starts_with('.') {
+        return false;
+    }
     for c in data.chars() {
         //Checks to see if there is more than one period
         if c == '.' && deci {
@@ -74,4 +79,5 @@ pub fn print_error(er: &str, line: usize, r: usize, file: &str, last: &str) {
             last.yellow().underline()
         )
     }
+    exit(1)
 }
