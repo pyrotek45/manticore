@@ -159,6 +159,10 @@ impl ManitcoreVm {
             self.execution_stack.push(i.clone());
             return;
         }
+        if i.token_type == TokenTypes::Nothing {
+            self.execution_stack.push(i.clone());
+            return;
+        }
         //Match values for each token
         match i.value.to_lowercase().as_str() {
             // If left paren is found then one must be missing the other pair
@@ -681,12 +685,14 @@ impl ManitcoreVm {
                     (self.execution_stack.pop(), self.execution_stack.pop())
                 {
                     if let Some(mut item) = b.block.pop() {
-                        if let Some(p) = a.proxy {
-                            item.proxy = Some(p.clone());
-                            self.heap.insert(p, item);
-                        } else {
-                            item.proxy = Some(a.value.clone());
-                            self.heap.insert(a.value.clone(), item);
+                        if item.token_type != TokenTypes::Nothing {
+                            if let Some(p) = a.proxy {
+                                item.proxy = Some(p.clone());
+                                self.heap.insert(p, item);
+                            } else {
+                                item.proxy = Some(a.value.clone());
+                                self.heap.insert(a.value.clone(), item);
+                            }
                         }
                     } else {
                         print_error(
@@ -853,7 +859,8 @@ impl ManitcoreVm {
                         if self.debug {
                             parser.debug = true
                         }
-                        let shunted = parser.shunt(&block.block).clone();
+                        let mut shunted = parser.shunt(&block.block).clone();
+                        shunted.remove(0);
                         let mut vm = ManitcoreVm::new(&shunted, &block.value);
                         if self.debug {
                             vm.debug = true

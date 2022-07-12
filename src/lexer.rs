@@ -178,14 +178,25 @@ impl Lexer {
                 }
 
                 // If none of the others, return an identifier
-                return Some(Token {
-                    token_type: TokenTypes::Identifier,
-                    value: self.buffer.clone(),
-                    line_number: self.line_number,
-                    row: self.row - self.buffer.len(),
-                    block: vec![],
-                    proxy: None,
-                });
+                if self.buffer == "_" {
+                    return Some(Token {
+                        token_type: TokenTypes::Nothing,
+                        value: "".to_string(),
+                        line_number: self.line_number,
+                        row: self.row - self.buffer.len(),
+                        block: vec![],
+                        proxy: None,
+                    })
+                } else {
+                    return Some(Token {
+                        token_type: TokenTypes::Identifier,
+                        value: self.buffer.clone(),
+                        line_number: self.line_number,
+                        row: self.row - self.buffer.len(),
+                        block: vec![],
+                        proxy: None,
+                    })
+                }
             }
         }
         Option::None
@@ -196,7 +207,7 @@ impl Lexer {
         // Parsing strings double quote
         for c in self.source.chars() {
             if self.is_parsing_stringdq {
-                if c == '\\' {
+                if c == '/' {
                     self.is_skip = true;
                     continue;
                 }
@@ -226,7 +237,7 @@ impl Lexer {
 
             // Parsing strings single quotes
             if self.is_parsing_stringsq {
-                if c == '\\' {
+                if c == '/' {
                     self.is_skip = true;
                     continue;
                 }

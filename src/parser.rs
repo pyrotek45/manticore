@@ -43,6 +43,9 @@ impl Parser {
                 self.output_stack.push(token.clone());
             }
 
+            if token.token_type == TokenTypes::Nothing {
+                self.output_stack.push(token.clone());
+            }
             // List go to output stack
             if token.token_type == TokenTypes::List {
                 self.output_stack.push(token.clone());
@@ -84,15 +87,94 @@ impl Parser {
 
                                     // if it is identifier then pop and add @
                                     if func.token_type == TokenTypes::Identifier {
-                                        self.output_stack.push(func.clone());
-                                        self.output_stack.push(Token {
-                                            token_type: TokenTypes::Symbol,
-                                            value: "@".to_string(),
-                                            line_number: token.line_number,
-                                            row: token.row,
-                                            block: vec![],
-                                            proxy: None,
-                                        })
+                                        // Check for complex identifier
+                                        if func.value.contains('.') {
+                                            let mut buffer = String::new();
+                                            let mut list = Vec::new();
+    
+                                            // Split by dots
+                                            // hello.world
+                                            for c in func.value.chars() {
+                                                if c == '.' {
+                                                    list.push(buffer.clone());
+                                                    buffer.clear()
+                                                } else {
+                                                    buffer += &c.to_string();
+                                                }
+                                            }
+                                            if !buffer.is_empty() {
+                                                list.push(buffer.clone())
+                                            }
+                                            buffer.clear();
+    
+                                            // [hello] [world]
+                                            list.reverse();
+    
+                                            // [world] [hello]
+                                            // Push first item
+                                            if let Some(t) = list.pop() {
+                                                if !t.is_empty() {
+                                                    self.output_stack.push(Token {
+                                                        token_type: TokenTypes::Identifier,
+                                                        value: t.to_string(),
+                                                        line_number: func.line_number,
+                                                        row: func.row,
+                                                        block: vec![],
+                                                        proxy: None,
+                                                    });
+                                                }
+                                            }
+    
+                                            list.reverse();
+                                            // [world]
+                                            for t in list {
+                                                if is_string_number(&t) {
+                                                    self.output_stack.push(Token {
+                                                        token_type: TokenTypes::Number,
+                                                        value: t.to_string(),
+                                                        line_number: func.line_number,
+                                                        row: func.row,
+                                                        block: vec![],
+                                                        proxy: None,
+                                                    });
+                                                } else {
+                                                    self.output_stack.push(Token {
+                                                        token_type: TokenTypes::Identifier,
+                                                        value: t.to_string(),
+                                                        line_number: func.line_number,
+                                                        row: func.row,
+                                                        block: vec![],
+                                                        proxy: None,
+                                                    });
+                                                }
+                                                self.output_stack.push(Token {
+                                                    token_type: TokenTypes::Symbol,
+                                                    value: ".".to_string(),
+                                                    line_number: func.line_number,
+                                                    row: func.row,
+                                                    block: vec![],
+                                                    proxy: None,
+                                                })
+                                            }
+                                            self.output_stack.push(Token {
+                                                token_type: TokenTypes::Symbol,
+                                                value: "@".to_string(),
+                                                line_number: func.line_number,
+                                                row: func.row,
+                                                block: vec![],
+                                                proxy: None,
+                                            })
+                                        } else {
+                                            self.output_stack.push(func);
+                                            self.output_stack.push(Token {
+                                                token_type: TokenTypes::Symbol,
+                                                value: "@".to_string(),
+                                                line_number: token.line_number,
+                                                row: token.row,
+                                                block: vec![],
+                                                proxy: None,
+                                            })
+                                        }
                                     }
                                 }
                             }
