@@ -91,7 +91,7 @@ impl Parser {
                                         if func.value.contains('.') {
                                             let mut buffer = String::new();
                                             let mut list = Vec::new();
-    
+
                                             // Split by dots
                                             // hello.world
                                             for c in func.value.chars() {
@@ -106,10 +106,10 @@ impl Parser {
                                                 list.push(buffer.clone())
                                             }
                                             buffer.clear();
-    
+
                                             // [hello] [world]
                                             list.reverse();
-    
+
                                             // [world] [hello]
                                             // Push first item
                                             if let Some(t) = list.pop() {
@@ -124,7 +124,7 @@ impl Parser {
                                                     });
                                                 }
                                             }
-    
+
                                             list.reverse();
                                             // [world]
                                             for t in list {

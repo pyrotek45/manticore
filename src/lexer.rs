@@ -182,12 +182,12 @@ impl Lexer {
                 if self.buffer == "_" {
                     return Some(Token {
                         token_type: TokenTypes::Nothing,
-                        value: "".to_string(),
+                        value: "_".to_string(),
                         line_number: self.line_number,
                         row: self.row - self.buffer.len(),
                         block: vec![],
                         proxy: None,
-                    })
+                    });
                 } else {
                     return Some(Token {
                         token_type: TokenTypes::Identifier,
@@ -196,7 +196,7 @@ impl Lexer {
                         row: self.row - self.buffer.len(),
                         block: vec![],
                         proxy: None,
-                    })
+                    });
                 }
             }
         }

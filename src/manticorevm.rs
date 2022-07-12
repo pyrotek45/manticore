@@ -47,8 +47,21 @@ impl ManitcoreVm {
             self.execute_token(&i);
             if self.exit_loop {
                 break;
-            }
+            };
 
+            self.heap = self
+                .heap
+                .iter()
+                .filter_map(|(id, tok)| {
+                    if tok.value != "_" {
+                        Some((id.clone(), tok.clone()))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            self.heap.remove("_");
             // for t in core_self {
             //     println!("{} in core ", t.value)
             // }
@@ -61,6 +74,9 @@ impl ManitcoreVm {
                 } else {
                     println!("{} -> ({} ~ None)", k, v.value)
                 }
+            }
+            for tok in &self.execution_stack {
+                print!("[{}] ",tok.value)
             }
             println!()
         }
@@ -602,7 +618,6 @@ impl ManitcoreVm {
                     self.execution_stack.pop(),
                     self.execution_stack.pop(),
                 ) {
-
                     let mut i: usize = 0;
                     if let Ok(v) = index.value.parse() {
                         i = v
@@ -1018,7 +1033,7 @@ impl ManitcoreVm {
                             Token {
                                 proxy: Some(values),
                                 token_type: TokenTypes::Nothing,
-                                value: "nothing".to_string(),
+                                value: "_".to_string(),
                                 block: vec![],
                                 line_number: 0,
                                 row: 0,
@@ -1070,53 +1085,87 @@ impl ManitcoreVm {
             // This function will pop off a block and execute it using the outer scope heap and stack
             "let" => {
                 if let Some(a) = self.execution_stack.pop() {
-                    let mut core_self = vec![];
-                    for (key, value) in &self.heap {
-                        core_self.push(Token {
-                            proxy: None,
-                            token_type: TokenTypes::Function,
-                            value: "var".to_string(),
-                            block: vec![],
-                            line_number: 0,
-                            row: 0,
-                        });
-                        core_self.push(Token {
-                            proxy: None,
-                            token_type: TokenTypes::Identifier,
-                            value: key.to_string(),
-                            block: vec![],
-                            line_number: 0,
-                            row: 0,
-                        });
-                        core_self.push(Token {
-                            proxy: None,
-                            token_type: TokenTypes::Symbol,
-                            value: ":".to_string(),
-                            block: vec![],
-                            line_number: 0,
-                            row: 0,
-                        });
-                        core_self.push(value.clone());
-                        core_self.push(Token {
-                            proxy: None,
-                            token_type: TokenTypes::Symbol,
-                            value: ";".to_string(),
-                            block: vec![],
-                            line_number: 0,
-                            row: 0,
-                        });
+                    match a.token_type {
+                        TokenTypes::Block => {
+                            let mut core_self = vec![];
+                            for (key, value) in &self.heap {
+                                core_self.push(Token {
+                                    proxy: None,
+                                    token_type: TokenTypes::Function,
+                                    value: "var".to_string(),
+                                    block: vec![],
+                                    line_number: 0,
+                                    row: 0,
+                                });
+                                core_self.push(Token {
+                                    proxy: None,
+                                    token_type: TokenTypes::Identifier,
+                                    value: key.to_string(),
+                                    block: vec![],
+                                    line_number: 0,
+                                    row: 0,
+                                });
+                                core_self.push(Token {
+                                    proxy: None,
+                                    token_type: TokenTypes::Symbol,
+                                    value: ":".to_string(),
+                                    block: vec![],
+                                    line_number: 0,
+                                    row: 0,
+                                });
+                                core_self.push(value.clone());
+                                core_self.push(Token {
+                                    proxy: None,
+                                    token_type: TokenTypes::Symbol,
+                                    value: ";".to_string(),
+                                    block: vec![],
+                                    line_number: 0,
+                                    row: 0,
+                                });
+                            }
+
+                            core_self.append(&mut a.block.clone());
+
+                            self.execution_stack.push(Token {
+                                token_type: TokenTypes::Block,
+                                value: a.value.clone(),
+                                line_number: 0,
+                                row: 0,
+                                block: core_self.clone(),
+                                proxy: a.proxy,
+                            });
+                        }
+
+                        TokenTypes::List => {
+                            let mut core_self = vec![];
+                            for id in &a.block {
+                                if let Some(tok) = self.heap.get(&id.value) {
+                                    core_self.push(tok.clone())
+                                } else {
+                                    core_self.push(id.clone())
+                                }
+                            }
+                            self.execution_stack.push(Token {
+                                token_type: TokenTypes::List,
+                                value: a.value.clone(),
+                                line_number: 0,
+                                row: 0,
+                                block: core_self.clone(),
+                                proxy: a.proxy,
+                            });
+                        }
+                        _ => print_error(
+                            format!(
+                                "Not the correct arguments for {}, expected a block or list",
+                                i.value
+                            )
+                            .as_str(),
+                            i.line_number,
+                            i.row,
+                            &self.file,
+                            &self.last_instruction,
+                        ),
                     }
-
-                    core_self.append(&mut a.block.clone());
-
-                    self.execution_stack.push(Token {
-                        token_type: TokenTypes::Block,
-                        value: a.value.clone(),
-                        line_number: 0,
-                        row: 0,
-                        block: core_self.clone(),
-                        proxy: a.proxy,
-                    });
                 } else {
                     print_error(
                         format!("not enough arguments for {}", i.value).as_str(),
@@ -1156,7 +1205,9 @@ impl ManitcoreVm {
 
                     // Copy the last item to return from inside the vm to the outside
                     if let Some(return_value) = vm.execution_stack.pop() {
-                        self.execution_stack.push(return_value)
+                        if return_value.token_type != TokenTypes::Break {
+                            self.execution_stack.push(return_value)
+                        }
                     }
                 } else {
                     print_error(
