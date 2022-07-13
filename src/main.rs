@@ -1,6 +1,8 @@
 extern crate clap;
 extern crate colored;
 
+
+mod unit_test;
 mod lexer;
 mod manticorevm;
 mod parser;
