@@ -11,7 +11,7 @@ use crate::{
 
 pub struct ManitcoreVm {
     instruction_tokens: Vec<Token>,
-    execution_stack: Vec<Token>,
+    pub execution_stack: Vec<Token>,
     last_instruction: String,
     stack_set: usize,
     file: String,

@@ -97,7 +97,7 @@ fn main() {
         let mut parser = Parser::new();
         loop {
             // Repl prompt
-            let readline = rl.readline(">> ");
+            let readline = rl.readline("Manticore REPL :: $ ");
             match readline {
                 Ok(line) => {
                     // Rustlyline History support
@@ -139,6 +139,10 @@ fn main() {
                         if vm.exit_loop {
                             break;
                         }
+                    }
+
+                    if let Some(tok) = vm.execution_stack.pop() {
+                        println!(" ---> ({}) ~ ({:?}) : [{:?}] ",tok.value,tok.proxy,tok.token_type)
                     }
                 }
                 Err(ReadlineError::Interrupted) => {
