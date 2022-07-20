@@ -1,6 +1,8 @@
+use std::rc::Rc;
+
 use crate::{
     string_utils::is_string_number,
-    token::{Token, TokenTypes},
+    token::{Functions, Token, Value},
 };
 
 pub struct Lexer {
@@ -12,21 +14,15 @@ pub struct Lexer {
     is_parsing_stringsq: bool,
     is_parsing_comment: bool,
     pub block_stack: Vec<Vec<Token>>,
-    function_keywords: Vec<String>,
-    bool_keywords: Vec<String>,
+    //function_keywords: Vec<String>,
     is_skip: bool,
 }
 fn manticore_functions() -> Vec<String> {
     vec![
-        // basic output
-        "print".to_string(),
-        "println".to_string(),
-        "flush".to_string(),
         // program flow
         "if".to_string(),
         // block control
         "call".to_string(),
-        "@".to_string(),
         //".".to_string(),
         "ret".to_string(),
         "let".to_string(),
@@ -36,23 +32,13 @@ fn manticore_functions() -> Vec<String> {
         "shc".to_string(),
         "rm".to_string(),
         "sec".to_string(),
-        // string function
-        "concat".to_string(),
-        // heap control
-        "set".to_string(),
-        "var".to_string(),
-        "=".to_string(),
-        // basic repl control
-        "exit".to_string(),
         // math functions
         "neg".to_string(),
         "sqrt".to_string(),
         "pow".to_string(),
-        // list functions
-        "range".to_string(),
-        // loop functions
-        "for".to_string(),
+        "mod".to_string(),
         "loop".to_string(),
+        "from".to_string(),
         // url
         "run_url".to_string(),
         "store_url".to_string(),
@@ -63,12 +49,11 @@ fn manticore_functions() -> Vec<String> {
         // os control
         "command".to_string(),
         // vm function
-        "break".to_string(),
+        "exit".to_string(),
         // boolean op
         "and".to_string(),
         "or".to_string(),
         "not".to_string(),
-        "equ".to_string(),
         "gtr".to_string(),
         "lss".to_string(),
         // input
@@ -99,8 +84,7 @@ impl Lexer {
                 is_parsing_stringdq: false,
                 is_parsing_stringsq: false,
                 block_stack: vec![vec![]],
-                function_keywords: manticore_functions(),
-                bool_keywords: vec!["true".to_string(), "false".to_string()],
+                //function_keywords: manticore_functions(),
                 is_parsing_comment: false,
                 is_skip: false,
             }
@@ -123,8 +107,7 @@ impl Lexer {
             is_parsing_stringdq: false,
             is_parsing_stringsq: false,
             block_stack: vec![vec![]],
-            function_keywords: manticore_functions(),
-            bool_keywords: vec!["true".to_string(), "false".to_string()],
+            //function_keywords: manticore_functions(),
             is_parsing_comment: false,
             is_skip: false,
         }
@@ -140,64 +123,150 @@ impl Lexer {
         self.source.clear()
     }
 
+    pub fn match_value(&self, value: &str) -> Token {
+        match value.to_lowercase().as_ref() {
+            "capture" => Token {
+                value: Value::Function(Functions::Capture),
+                id: None,
+            },
+            "let" => Token {
+                value: Value::Function(Functions::Let),
+                id: None,
+            },
+            "readln" => Token {
+                value: Value::Function(Functions::Readln),
+                id: None,
+            },
+            "pow" => Token {
+                value: Value::Function(Functions::Pow),
+                id: None,
+            },
+            "neg" => Token {
+                value: Value::Function(Functions::Neg),
+                id: None,
+            },
+            "sqrt" => Token {
+                value: Value::Function(Functions::Sqrt),
+                id: None,
+            },
+            "cmd" => Token {
+                value: Value::Function(Functions::Command),
+                id: None,
+            },
+            "dup" => Token {
+                value: Value::Function(Functions::Dup),
+                id: None,
+            },
+            "rec" => Token {
+                value: Value::Function(Functions::Recursive),
+                id: None,
+            },
+            "self" => Token {
+                value: Value::Function(Functions::SelfId),
+                id: None,
+            },
+            "not" => Token {
+                value: Value::Function(Functions::Not),
+                id: None,
+            },
+            "lss" => Token {
+                value: Value::Function(Functions::Lss),
+                id: None,
+            },
+            "gtr" => Token {
+                value: Value::Function(Functions::Gtr),
+                id: None,
+            },
+            "or" => Token {
+                value: Value::Function(Functions::Or),
+                id: None,
+            },
+            "and" => Token {
+                value: Value::Function(Functions::And),
+                id: None,
+            },
+            "flush" => Token {
+                value: Value::Function(Functions::Flush),
+                id: None,
+            },
+            "break" => Token {
+                value: Value::Function(Functions::Break),
+                id: None,
+            },
+            "print" => Token {
+                value: Value::Function(Functions::Print),
+                id: None,
+            },
+            "for" => Token {
+                value: Value::Function(Functions::For),
+                id: None,
+            },
+            "range" => Token {
+                value: Value::Function(Functions::Range),
+                id: None,
+            },
+            "println" => Token {
+                value: Value::Function(Functions::Println),
+                id: None,
+            },
+            "mod" => Token {
+                value: Value::Function(Functions::Mod),
+                id: None,
+            },
+            "equ" => Token {
+                value: Value::Function(Functions::Equals),
+                id: None,
+            },
+            "if" => Token {
+                value: Value::Function(Functions::If),
+                id: None,
+            },
+            "=" | "var" => Token {
+                value: Value::Function(Functions::VariableAssign),
+                id: None,
+            },
+            "false" => Token {
+                value: Value::Bool(false),
+                id: None,
+            },
+            "true" => Token {
+                value: Value::Bool(true),
+                id: None,
+            },
+            _ => Token {
+                value: Value::Identifier(self.buffer.to_lowercase()),
+                id: None,
+            },
+        }
+    }
+
     // This function is used to check to see if the current
     // buffer is either a (number,function,bool,identifier)
     fn check_token(&self) -> Option<Token> {
         // Checking if buffer is numerical
         if !self.buffer.is_empty() {
             if is_string_number(&self.buffer) {
-                return Some(Token {
-                    token_type: TokenTypes::Number,
-                    value: self.buffer.clone(),
-                    line_number: self.line_number,
-                    row: self.row - self.buffer.len(),
-                    block: vec![],
-                    proxy: None,
-                });
-            } else {
-                // Checking if buffer is a function
-                if self.function_keywords.contains(&self.buffer) {
-                    return Some(Token {
-                        token_type: TokenTypes::Function,
-                        value: self.buffer.clone(),
-                        line_number: self.line_number,
-                        row: self.row - self.buffer.len(),
-                        block: vec![],
-                        proxy: None,
-                    });
-                }
-                // Checking if buffer is a bool
-                if self.bool_keywords.contains(&self.buffer) {
-                    return Some(Token {
-                        token_type: TokenTypes::Bool,
-                        value: self.buffer.clone(),
-                        line_number: self.line_number,
-                        row: self.row - self.buffer.len(),
-                        block: vec![],
-                        proxy: None,
-                    });
-                }
+                // Float
+                if self.buffer.contains('.') {
+                    if let Ok(v) = self.buffer.parse() {
+                        return Some(Token {
+                            value: Value::Float(v),
 
-                // If none of the others, return an identifier
-                if self.buffer == "_" {
-                    return Some(Token {
-                        token_type: TokenTypes::Nothing,
-                        value: "_".to_string(),
-                        line_number: self.line_number,
-                        row: self.row - self.buffer.len(),
-                        block: vec![],
-                        proxy: None,
-                    });
+                            id: None,
+                        });
+                    }
                 } else {
-                    return Some(Token {
-                        token_type: TokenTypes::Identifier,
-                        value: self.buffer.clone(),
-                        line_number: self.line_number,
-                        row: self.row - self.buffer.len(),
-                        block: vec![],
-                        proxy: None,
-                    });
+                    // Int
+                    if let Ok(v) = self.buffer.parse() {
+                        return Some(Token {
+                            value: Value::Integer(v),
+
+                            id: None,
+                        });
+                    }
                 }
+            } else {
+                return Some(self.match_value(&self.buffer));
             }
         }
         Option::None
@@ -221,14 +290,19 @@ impl Lexer {
                 } else {
                     self.is_parsing_stringdq = false;
                     if let Some(vec_last) = self.block_stack.last_mut() {
-                        vec_last.push(Token {
-                            token_type: TokenTypes::String,
-                            value: self.buffer.clone(),
-                            line_number: self.line_number,
-                            row: self.row,
-                            block: vec![],
-                            proxy: None,
-                        })
+                        if self.buffer.chars().count() == 1 {
+                            if let Some(mychar) = self.buffer.chars().next() {
+                                vec_last.push(Token {
+                                    value: Value::Char(mychar),
+                                    id: None,
+                                })
+                            }
+                        } else {
+                            vec_last.push(Token {
+                                value: Value::String(self.buffer.clone()),
+                                id: None,
+                            })
+                        }
                     }
                     self.row += self.buffer.len() + 1;
                     self.buffer.clear();
@@ -251,14 +325,19 @@ impl Lexer {
                 } else {
                     self.is_parsing_stringsq = false;
                     if let Some(vec_last) = self.block_stack.last_mut() {
-                        vec_last.push(Token {
-                            token_type: TokenTypes::String,
-                            value: self.buffer.clone(),
-                            line_number: self.line_number,
-                            row: self.row,
-                            block: vec![],
-                            proxy: None,
-                        })
+                        if self.buffer.chars().count() == 1 {
+                            if let Some(mychar) = self.buffer.chars().next() {
+                                vec_last.push(Token {
+                                    value: Value::Char(mychar),
+                                    id: None,
+                                })
+                            }
+                        } else {
+                            vec_last.push(Token {
+                                value: Value::String(self.buffer.clone()),
+                                id: None,
+                            })
+                        }
                     }
                     self.row += self.buffer.len() + 1;
                     self.buffer.clear();
@@ -333,14 +412,28 @@ impl Lexer {
                     }
 
                     if let Some(vec_last) = self.block_stack.last_mut() {
-                        vec_last.push(Token {
-                            token_type: TokenTypes::Symbol,
-                            value: c.to_string(),
-                            line_number: self.line_number,
-                            row: self.row,
-                            block: vec![],
-                            proxy: None,
-                        })
+                        match c {
+                            '&' => vec_last.push(Token {
+                                value: Value::Function(Functions::UserMacroCall),
+                                id: None,
+                            }),
+                            '~' => vec_last.push(Token {
+                                value: Value::Function(Functions::FunctionVariableAssign),
+                                id: None,
+                            }),
+                            '@' => vec_last.push(Token {
+                                value: Value::Function(Functions::UserFunctionCall),
+                                id: None,
+                            }),
+                            '=' => vec_last.push(Token {
+                                value: Value::Function(Functions::VariableAssign),
+                                id: None,
+                            }),
+                            _ => vec_last.push(Token {
+                                value: Value::Symbol(c),
+                                id: None,
+                            }),
+                        }
                     }
                 }
 
@@ -376,17 +469,6 @@ impl Lexer {
                     }
 
                     self.block_stack.push(vec![]);
-
-                    if let Some(vec_last) = self.block_stack.last_mut() {
-                        vec_last.push(Token {
-                            token_type: TokenTypes::Break,
-                            value: "break".to_string(),
-                            line_number: self.line_number,
-                            row: self.row,
-                            block: vec![],
-                            proxy: None,
-                        })
-                    }
                 }
 
                 '}' => {
@@ -400,13 +482,9 @@ impl Lexer {
                     if let Some(list) = self.block_stack.pop() {
                         if let Some(vec_last) = self.block_stack.last_mut() {
                             vec_last.push(Token {
-                                token_type: TokenTypes::Block,
-                                value: "block".to_string(),
-                                line_number: self.line_number,
-                                row: self.row,
-                                block: list,
-                                proxy: None,
-                            })
+                                value: Value::Block(Some(Rc::new(list))),
+                                id: None,
+                            });
                         }
                     }
                 }
@@ -434,12 +512,8 @@ impl Lexer {
                     if let Some(list) = self.block_stack.pop() {
                         if let Some(vec_last) = self.block_stack.last_mut() {
                             vec_last.push(Token {
-                                token_type: TokenTypes::List,
-                                value: "list".to_string(),
-                                line_number: self.line_number,
-                                row: self.row,
-                                block: list,
-                                proxy: None,
+                                value: Value::List(Some(Rc::new(list))),
+                                id: None,
                             })
                         }
                     }

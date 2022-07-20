@@ -1,20 +1,20 @@
+use std::time::{Duration, Instant};
 extern crate clap;
 extern crate colored;
 
-
-mod unit_test;
 mod lexer;
 mod manticorevm;
 mod parser;
 mod string_utils;
 mod token;
+mod unit_test;
 
 use clap::*;
 use manticorevm::ManitcoreVm;
 use parser::Parser;
 
 use rustyline::error::ReadlineError;
-use rustyline::Editor;
+use rustyline::{Editor, Result};
 
 fn main() {
     // Clap setup
@@ -35,6 +35,14 @@ fn main() {
                 .takes_value(false)
                 .short('d')
                 .help("displays debug information"),
+        )
+        .arg(
+            Arg::with_name("TIME")
+                .value_name("TIME")
+                .long("time")
+                .takes_value(false)
+                .short('t')
+                .help("displays how long manticore takes to run"),
         )
         .get_matches();
 
@@ -66,11 +74,16 @@ fn main() {
     // Repl or File
     if let Some(filename) = matches.value_of("FILE") {
         // Get filename from argument
-
+        let start = Instant::now();
         let mut lexer = lexer::Lexer::new_from_file(filename);
 
         // Parse the file into tokens
         lexer.parse();
+        if matches.is_present("TIME") {
+            let duration = start.elapsed();
+            println!("Lexing: {:?}", duration);
+        }
+
         let mut parser = Parser::new();
         if matches.is_present("DEBUG") {
             parser.debug = true;
@@ -78,6 +91,10 @@ fn main() {
 
         // Store now parsed tokens into a new list
         let shunted = parser.shunt(&lexer.block_stack[0]).clone();
+        if matches.is_present("TIME") {
+            let duration = start.elapsed();
+            println!("Parsing: {:?}", duration);
+        }
         let mut vm = ManitcoreVm::new(&shunted, filename);
         if matches.is_present("DEBUG") {
             vm.debug = true;
@@ -85,10 +102,15 @@ fn main() {
 
         // Execute the vm using parsed token list
         vm.execute();
+
+        if matches.is_present("TIME") {
+            let duration = start.elapsed();
+            println!("Execution: {:?}", duration);
+        }
         std::process::exit(0)
     } else {
         // Using Repl
-        let mut rl = Editor::<()>::new();
+        let mut rl = Editor::<()>::new().unwrap();
         if rl.load_history("history.txt").is_err() {
             println!("No previous history.");
         }
@@ -104,6 +126,7 @@ fn main() {
                 Ok(line) => {
                     // Rustlyline History support
                     rl.add_history_entry(line.as_str());
+                    rl.save_history("history.txt").unwrap();
                     //repl.push_str(&(" ".to_owned() + &line));
 
                     // Create new parsing and lexing engine
@@ -129,7 +152,7 @@ fn main() {
 
                     // Shunt tokens and insert them into vm
                     parser._clear();
-                    let shunted = parser.shunt(&lexer.block_stack[0]).clone();
+                    let shunted = parser.shunt(&lexer.block_stack[0]);
 
                     // Enable vm debug
                     if repl_debug {
@@ -144,7 +167,11 @@ fn main() {
                     }
 
                     if let Some(tok) = vm.execution_stack.pop() {
-                        println!(" ---> ({}) ~ ({:?}) : [{:?}] ",tok.value,tok.proxy,tok.token_type)
+                        println!(
+                            " ---> [{}] : ({})",
+                            tok.get_value_as_string(),
+                            tok.get_type_as_string()
+                        )
                     }
                 }
                 Err(ReadlineError::Interrupted) => {
@@ -159,6 +186,5 @@ fn main() {
                 }
             }
         }
-        rl.save_history("history.txt").unwrap();
     }
 }
