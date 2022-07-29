@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 extern crate clap;
 extern crate colored;
@@ -10,11 +11,22 @@ mod token;
 mod unit_test;
 
 use clap::*;
+use colored::Colorize;
 use manticorevm::ManitcoreVm;
 use parser::Parser;
 
 use rustyline::error::ReadlineError;
 use rustyline::{Editor, Result};
+
+use rustyline::validate::MatchingBracketValidator;
+use rustyline::{Cmd, EventHandler, KeyCode, KeyEvent, Modifiers};
+use rustyline_derive::{Completer, Helper, Highlighter, Hinter, Validator};
+
+#[derive(Completer, Helper, Highlighter, Hinter, Validator)]
+struct InputValidator {
+    #[rustyline(Validator)]
+    brackets: MatchingBracketValidator,
+}
 
 fn main() {
     // Clap setup
@@ -79,38 +91,49 @@ fn main() {
 
         // Parse the file into tokens
         lexer.parse();
-        if matches.is_present("TIME") {
-            let duration = start.elapsed();
-            println!("Lexing: {:?}", duration);
-        }
-
         let mut parser = Parser::new();
-        if matches.is_present("DEBUG") {
-            parser.debug = true;
-        }
 
         // Store now parsed tokens into a new list
-        let shunted = parser.shunt(&lexer.block_stack[0]).clone();
+        let shunted = parser.shunt(&lexer.block_stack[0]);
+        if matches.is_present("DEBUG") {
+            parser.debug_output(0, Rc::new(lexer.block_stack[0].clone()));
+        }
         if matches.is_present("TIME") {
             let duration = start.elapsed();
-            println!("Parsing: {:?}", duration);
+            println!("{} {:?}", ">> Lexing:".bright_green(), duration);
+        }
+
+        if matches.is_present("DEBUG") {
+            parser.debug_output(0, Rc::new(parser.output_stack.clone()));
+        }
+        if matches.is_present("TIME") {
+            let duration = start.elapsed();
+            println!("{} {:?}", ">> Parsing:".bright_green(), duration);
         }
         let mut vm = ManitcoreVm::new(&shunted, filename);
-        if matches.is_present("DEBUG") {
-            vm.debug = true;
+        if !matches.is_present("DEBUG") {
+            // Execute the vm using parsed token list
+            vm.execute();
         }
 
-        // Execute the vm using parsed token list
-        vm.execute();
+
 
         if matches.is_present("TIME") {
             let duration = start.elapsed();
-            println!("Execution: {:?}", duration);
+            println!("{} {:?}", ">> Execution:".bright_green(), duration);
         }
         std::process::exit(0)
     } else {
         // Using Repl
-        let mut rl = Editor::<()>::new().unwrap();
+        let h = InputValidator {
+            brackets: MatchingBracketValidator::new(),
+        };
+        let mut rl = Editor::new().unwrap();
+        rl.set_helper(Some(h));
+        rl.bind_sequence(
+            KeyEvent(KeyCode::Char('s'), Modifiers::CTRL),
+            EventHandler::Simple(Cmd::Newline),
+        );
         if rl.load_history("history.txt").is_err() {
             println!("No previous history.");
         }
@@ -166,7 +189,7 @@ fn main() {
                         }
                     }
 
-                    if let Some(tok) = vm.execution_stack.pop() {
+                    if let Some(tok) = vm.get_tokenifvar() {
                         println!(
                             " ---> [{}] : ({})",
                             tok.get_value_as_string(),
