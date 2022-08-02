@@ -110,13 +110,11 @@ fn main() {
             let duration = start.elapsed();
             println!("{} {:?}", ">> Parsing:".bright_green(), duration);
         }
-        let mut vm = ManitcoreVm::new(&shunted, filename);
+        let mut vm = ManitcoreVm::new(&shunted);
         if !matches.is_present("DEBUG") {
             // Execute the vm using parsed token list
             vm.execute();
         }
-
-
 
         if matches.is_present("TIME") {
             let duration = start.elapsed();
@@ -140,7 +138,7 @@ fn main() {
 
         let mut repl = String::new();
         let mut repl_debug: bool = false;
-        let mut vm = ManitcoreVm::new(&[], "");
+        let mut vm = ManitcoreVm::new(&[]);
         let mut parser = Parser::new();
         loop {
             // Repl prompt

@@ -2,10 +2,7 @@ use std::rc::Rc;
 
 use colored::Colorize;
 
-use crate::{
-    string_utils::is_string_number,
-    token::{Functions, Token, Value},
-};
+use crate::token::{BlockType, Functions, Token, Value};
 
 pub struct Parser {
     pub operator_stack: Vec<Token>,
@@ -37,14 +34,30 @@ impl Parser {
             }
 
             if let Value::Block(block) = &t.value {
-                println!(
-                    "{}{}{}",
-                    sdep.bright_cyan(),
-                    "|--".bright_cyan(),
-                    "BLOCK:".bright_cyan()
-                );
-                self.debug_output(depth + 1, block.clone());
-                continue;
+                match block {
+                    BlockType::Literal(block) => {
+                        println!(
+                            "{}{}{}",
+                            sdep.bright_cyan(),
+                            "|--".bright_cyan(),
+                            "BLOCK Literal:".bright_cyan()
+                        );
+                        self.debug_output(depth + 1, block.clone());
+                        continue;
+                    }
+                    BlockType::Lambda(block) => {
+                        println!(
+                            "{}{}{}",
+                            sdep.bright_cyan(),
+                            "|--".bright_cyan(),
+                            "BLOCK Lambda:".bright_cyan()
+                        );
+                        self.debug_output(depth + 1, block.clone());
+                        continue;
+                    }
+                    BlockType::Procedure(_) => todo!(),
+                    BlockType::Struct(_) => todo!(),
+                }
             }
             if let Value::List(block) = &t.value {
                 println!(
@@ -70,7 +83,7 @@ impl Parser {
 
     pub fn shunt(&mut self, input: &[Token]) -> Vec<Token> {
         for token in input {
-            match token.value {
+            match &token.value {
                 Value::Integer(_) => {
                     self.output_stack.push(token.clone());
                 }
@@ -87,31 +100,32 @@ impl Parser {
                     self.output_stack.push(token.clone());
                 }
 
-                Value::Block(_) => {
-                    // Shunt blocks first time
-                    let mut np = Parser::new();
-                    if self.debug {
-                        np.debug = true;
-                    }
-                    if let Value::Block(shunted) = &token.value {
-                        self.output_stack.push(Token {
-                            value: Value::Block(Rc::new(np.shunt(shunted))),
-                        });
-                    }
-
-                    if let Some(last) = self.operator_stack.last().cloned() {
-                        if let Value::Function(function) = last.value {
-                            match function {
-                                Functions::UserMacroCall => {
-                                    self.operator_stack.pop();
-                                    self.output_stack.push(last)
-                                }
-                                Functions::UserFunctionCall => {
-                                    self.operator_stack.pop();
-                                    self.output_stack.push(last)
-                                }
-                                _ => {}
+                Value::Block(block) => {
+                    match &block {
+                        BlockType::Literal(shunted) => {
+                            // Shunt blocks first time
+                            let mut np = Parser::new();
+                            if self.debug {
+                                np.debug = true;
                             }
+
+                            self.output_stack.push(Token {
+                                value: Value::Block(BlockType::Literal(Rc::new(np.shunt(shunted)))),
+                            });
+                        }
+                        BlockType::Lambda(shunted) => {
+                            // Shunt blocks first time
+                            let mut np = Parser::new();
+                            if self.debug {
+                                np.debug = true;
+                            }
+
+                            self.operator_stack.push(Token {
+                                value: Value::Block(BlockType::Lambda(Rc::new(np.shunt(shunted)))),
+                            });
+                        }
+                        _ => {
+                            todo!()
                         }
                     }
                 }
@@ -148,8 +162,8 @@ impl Parser {
                                 }
                             }
 
-                            // if last item on operator stack is a function pop
-                            // this is for leapfrog TM parsing
+                            // // if last item on operator stack is a function pop
+                            // // this is for leapfrog TM parsing
                             if let Some(ref last) = self.operator_stack.pop() {
                                 match &last.value {
                                     Value::Function(fun) => match fun {
@@ -159,8 +173,10 @@ impl Parser {
                                             self.output_stack.push(last.clone());
                                         }
                                     },
-                                    Value::UserFunction(_) => self.output_stack.push(last.clone()),
-                                    Value::UserMacro(_) => self.output_stack.push(last.clone()),
+                                    Value::UserBlockCall(_) => self.output_stack.push(last.clone()),
+                                    Value::Block(BlockType::Lambda(_)) => {
+                                        self.output_stack.push(last.clone())
+                                    }
                                     _ => self.operator_stack.push(last.clone()),
                                 }
                             }
@@ -176,27 +192,27 @@ impl Parser {
                             }
                         }
                         // Macros
-                        '&' => {
-                            if let Some(token) = self.output_stack.pop() {
-                                match token.value {
-                                    Value::Identifier(ident) => self.operator_stack.push(Token {
-                                        value: Value::UserMacro(ident),
-                                    }),
-                                    _ => self.operator_stack.push(token),
-                                }
-                            }
-                        }
+                        // '&' => {
+                        //     if let Some(token) = self.output_stack.pop() {
+                        //         match token.value {
+                        //             Value::Identifier(ident) => self.operator_stack.push(Token {
+                        //                 value: Value::UserMacro(ident),
+                        //             }),
+                        //             _ => self.operator_stack.push(token),
+                        //         }
+                        //     }
+                        // }
                         // Functions
-                        ':' => {
-                            if let Some(token) = self.output_stack.pop() {
-                                match token.value {
-                                    Value::Identifier(ident) => self.operator_stack.push(Token {
-                                        value: Value::UserFunction(ident),
-                                    }),
-                                    _ => self.operator_stack.push(token),
-                                }
-                            }
-                        }
+                        // ':' => {
+                        //     if let Some(token) = self.output_stack.pop() {
+                        //         match token.value {
+                        //             Value::Identifier(ident) => self.operator_stack.push(Token {
+                        //                 value: Value::UserFunction(ident),
+                        //             }),
+                        //             _ => self.operator_stack.push(token),
+                        //         }
+                        //     }
+                        // }
                         _ => self.operator_stack.push(token.clone()),
                     }
                 }
@@ -236,8 +252,9 @@ impl Parser {
                     | Functions::And
                     | Functions::Or
                     | Functions::Gtr
-                    | Functions::Lss 
-                    | Functions::Neg => {
+                    | Functions::Lss
+                    | Functions::Neg
+                    | Functions::UserFunctionCall => {
                         //Pop off higher precedence before adding
 
                         // if last item in operator stack is not a "("
@@ -276,12 +293,10 @@ impl Parser {
                         continue;
                     }
                     Functions::FunctionVariableAssign => self.output_stack.push(token.clone()),
-                    Functions::MacroVariableAssign => self.output_stack.push(token.clone()),
                     _ => self.operator_stack.push(token.clone()),
                 },
                 Value::Char(_) => self.output_stack.push(token.clone()),
-                Value::UserFunction(_) => self.operator_stack.push(token.clone()),
-                Value::UserMacro(_) => self.operator_stack.push(token.clone()),
+                Value::UserBlockCall(_) => self.operator_stack.push(token.clone()),
             }
         }
 

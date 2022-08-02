@@ -1,47 +1,38 @@
-use core::{fmt, time};
+use core::time;
 use getch::Getch;
 use hashbrown::HashMap;
 use modulo::Mod;
 use rand::Rng;
-use std::borrow::BorrowMut;
-use std::f32::consts::E;
-use std::ops::Deref;
 use std::process::Command;
 use std::rc::Rc;
+use std::thread;
 use std::{io::Write, vec};
-use std::{thread};
 
-
+use crate::token::BlockType;
 use crate::{
-    lexer::{self},
-    parser::Parser,
-    string_utils::{is_string_number, print_error, trim_newline},
+    string_utils::{is_string_number, trim_newline},
     token::{Functions, Token, Value},
 };
 
 pub struct ManitcoreVm {
     vm_instruction_: Vec<Token>,
     pub execution_stack: Vec<Token>,
-    last_instruction: String,
-    file: String,
     pub exit_loop: bool,
     pub continue_loop: bool,
     pub debug: bool,
-    pub function_call: bool,
+    pub block_call: bool,
     pub core_self: Vec<Token>,
     call_stack: Vec<HashMap<String, Token>>,
 }
 
 impl ManitcoreVm {
-    pub fn new(tokenlist: &[Token], file: &str) -> Self {
+    pub fn new(tokenlist: &[Token]) -> Self {
         Self {
             vm_instruction_: tokenlist.to_vec(),
             execution_stack: Vec::with_capacity(1024),
-            file: file.to_string(),
-            last_instruction: String::new(),
             debug: false,
             exit_loop: false,
-            function_call: false,
+            block_call: false,
             core_self: vec![],
             call_stack: vec![HashMap::new()],
             continue_loop: false,
@@ -123,8 +114,23 @@ impl ManitcoreVm {
             Value::Bool(_) => {
                 self.execution_stack.push(token.clone());
             }
-            Value::Block(_) => {
-                self.execution_stack.push(token.clone());
+            Value::Block(block) => {
+                match block {
+                    BlockType::Lambda(block) => {
+                        // Call with new scope
+                        self.call_stack.push(HashMap::new());
+                        for t in block.iter() {
+                            self.execute_token(t)
+                        }
+                        if let Some(token) = self.get_tokenifvar() {
+                            self.execution_stack.push(token)
+                        }
+                        self.call_stack.pop();
+                    }
+                    _ => {
+                        self.execution_stack.push(token.clone());
+                    }
+                }
             }
             Value::List(_) => {
                 self.execution_stack.push(token.clone());
@@ -161,19 +167,16 @@ impl ManitcoreVm {
                 Functions::Random => self.random(),
                 Functions::Command => self.command(),
                 Functions::Exit => self.exit(),
-                Functions::Recursive => self.recursive(),
+                Functions::Recursive => todo!(),
                 Functions::Dup => self.dup(),
                 Functions::Include => self.include(),
                 Functions::Add => self.stack_add(),
                 Functions::Sub => self.stack_sub(),
                 Functions::Mul => self.stack_mul(),
                 Functions::Div => self.stack_div(),
-                Functions::UserFunctionCall => self.function_call(),
-                Functions::UserFunctionChain => self.user_function_chain_call(),
+                Functions::UserFunctionCall => self.block_call(),
+                Functions::UserFunctionChain => self.user_block_chain_call(),
                 Functions::FunctionVariableAssign => self.function_variable_assign(),
-                Functions::UserMacroCall => self.macro_call(),
-                Functions::UserMacroChain => self.user_macro_chain_call(),
-                Functions::MacroVariableAssign => self.macro_variable_assign(),
                 Functions::Continue => self.continue_loop(),
                 Functions::Push => self.list_push(),
                 Functions::Pop => self.list_pop(),
@@ -184,15 +187,25 @@ impl ManitcoreVm {
                 Functions::Clear => self.clearscreen(),
                 Functions::Getch => self.getch(),
                 Functions::Sleep => self.sleep(),
+                Functions::Proc => self.create_proc(),
+                Functions::Return => self.return_top(),
+
             },
             Value::Nothing => {
                 todo!()
             }
             Value::Char(_) => self.execution_stack.push(token.clone()),
-            Value::UserFunction(function_name) => self.user_function_call(function_name),
-            Value::UserMacro(macro_name) => self.user_macro_call(macro_name),
+            Value::UserBlockCall(function_name) => self.user_block_call(function_name),
         }
     }
+
+    fn return_top(&mut self) {
+        if let Some(token) = self.get_tokenifvar() {
+            self.execution_stack.push(token)
+        }
+    }
+
+    // todo change to match statement for each block type
 
     fn closure_let(&mut self) {
         if let Some(block) = self.get_tokenifvar() {
@@ -210,12 +223,12 @@ impl ManitcoreVm {
                         value: Value::Function(Functions::VariableAssign),
                     })
                 }
-                if let Value::Block(block) = block.value {
+                if let Value::Block(BlockType::Literal(ref block)) = block.value {
                     for t in block.iter() {
                         core_self.push(t.clone())
                     }
                     self.execution_stack.push(Token {
-                        value: Value::Block(Rc::new(core_self)),
+                        value: Value::Block(BlockType::Literal(Rc::new(core_self))),
                     })
                 }
             }
@@ -237,7 +250,7 @@ impl ManitcoreVm {
                 })
             }
             self.execution_stack.push(Token {
-                value: Value::Block(Rc::new(core_self)),
+                value: Value::Block(BlockType::Literal(Rc::new(core_self))),
             })
         }
     }
@@ -351,7 +364,7 @@ impl ManitcoreVm {
         if let (Some(tblock), Some(list)) = (self.execution_stack.pop(), self.execution_stack.pop())
         {
             match (tblock.value, &list.value) {
-                (Value::Block(block), Value::List(list)) => {
+                (Value::Block(BlockType::Literal(ref block)), Value::List(list)) => {
                     let mut capture = vec![];
                     capture.clone_from(&*block);
 
@@ -373,31 +386,28 @@ impl ManitcoreVm {
                     }
 
                     self.execution_stack.push(Token {
-                        value: Value::Block(Rc::new(capture)),
+                        value: Value::Block(BlockType::Literal(Rc::new(capture))),
                     })
                 }
-                (Value::Block(block), Value::Identifier(ident)) => {
+                (Value::Block(BlockType::Literal(ref block)), Value::Identifier(ident)) => {
                     let mut capture = vec![];
                     capture.clone_from(&*block);
 
-
-                            capture.insert(
-                                0,
-                                Token {
-                                    value: Value::Function(Functions::VariableAssign),
-                                },
-                            );
-                            if let Some(scope) = self.call_stack.last_mut() {
-                                if let Some(item) = scope.get(ident) {
-                                    capture.insert(0, item.clone());
-                                }
-                            }
-                            capture.insert(0, list.clone());
-                        
-                    
+                    capture.insert(
+                        0,
+                        Token {
+                            value: Value::Function(Functions::VariableAssign),
+                        },
+                    );
+                    if let Some(scope) = self.call_stack.last_mut() {
+                        if let Some(item) = scope.get(ident) {
+                            capture.insert(0, item.clone());
+                        }
+                    }
+                    capture.insert(0, list.clone());
 
                     self.execution_stack.push(Token {
-                        value: Value::Block(Rc::new(capture)),
+                        value: Value::Block(BlockType::Literal(Rc::new(capture))),
                     })
                 }
                 _ => {
@@ -410,7 +420,7 @@ impl ManitcoreVm {
     fn recursive(&mut self) {
         if let (Some(tblock), Some(id)) = (self.execution_stack.pop(), self.execution_stack.pop()) {
             match (tblock.value.clone(), id.value) {
-                (Value::Block(block), Value::Identifier(ident)) => {
+                (Value::Block(BlockType::Literal(ref block)), Value::Identifier(ident)) => {
                     let mut recurse = vec![
                         Token {
                             value: Value::Identifier(ident.clone()),
@@ -430,7 +440,7 @@ impl ManitcoreVm {
                         recurse.push(t.clone())
                     }
                     self.execution_stack.push(Token {
-                        value: Value::Block(Rc::new(recurse)),
+                        value: Value::Block(BlockType::Literal(Rc::new(recurse))),
                     })
                 }
                 _ => {
@@ -510,7 +520,7 @@ impl ManitcoreVm {
             //if true single if statement
             if let Value::Bool(bool) = boolmaybe.value {
                 if bool {
-                    if let Value::Block(block) = block.value {
+                    if let Value::Block(BlockType::Literal(block)) = block.value {
                         for t in &*block {
                             self.execute_token(t)
                         }
@@ -519,12 +529,12 @@ impl ManitcoreVm {
             } else if let Some(bool2) = self.get_tokenifvar() {
                 if let Value::Bool(bool) = bool2.value {
                     if bool {
-                        if let Value::Block(block) = boolmaybe.value {
+                        if let Value::Block(BlockType::Literal(block)) = boolmaybe.value {
                             for t in &*block {
                                 self.execute_token(t)
                             }
                         }
-                    } else if let Value::Block(block) = block.value {
+                    } else if let Value::Block(BlockType::Literal(block)) = block.value {
                         for t in &*block {
                             self.execute_token(t)
                         }
@@ -536,7 +546,7 @@ impl ManitcoreVm {
 
     fn create_range(&mut self) {
         if let (Some(end), Some(start)) = (self.get_tokenifvar(), self.get_tokenifvar()) {
-            match (start.value, end.value) {
+            match (start.value.clone(), end.value.clone()) {
                 (Value::Integer(start), Value::Integer(end)) => {
                     let mut new_list: Vec<Token> = Vec::new();
                     for x in start..=end {
@@ -549,7 +559,7 @@ impl ManitcoreVm {
                     })
                 }
                 _ => {
-                    println!("cant make a range from these types");
+                    println!("cant make a range from these types{} {}",start.get_type_as_string(),end.get_type_as_string());
                 }
             }
         }
@@ -561,9 +571,9 @@ impl ManitcoreVm {
             self.get_tokenifvar(),
             self.execution_stack.pop(),
         ) {
-            match (block.value, list.value, &variable.value) {
-                (Value::Block(ref block), Value::Block(list), Value::Identifier(variable_name)) => {
-                    'outer: for variable in &*list {
+            match (block.value.clone(), list.value.clone(), &variable.value) {
+                (Value::Block(BlockType::Literal(ref block)), Value::Block(BlockType::Literal(ref list)), Value::Identifier(variable_name)) => {
+                    'outer: for variable in list.iter() {
                         if variable_name != "_" {
                             if let Some(scope) = self.call_stack.last_mut() {
                                 scope.insert(variable_name.to_string(), variable.clone());
@@ -585,8 +595,8 @@ impl ManitcoreVm {
                     }
                     self.exit_loop = false;
                 }
-                (Value::Block(ref block), Value::List(list), Value::Identifier(variable_name)) => {
-                    'outer1: for variable in &*list {
+                (Value::Block(BlockType::Literal(ref block)), Value::List(ref list), Value::Identifier(variable_name)) => {
+                    'outer1: for variable in list.iter() {
                         if variable_name != "_" {
                             if let Some(scope) = self.call_stack.last_mut() {
                                 scope.insert(variable_name.to_string(), variable.clone());
@@ -609,7 +619,7 @@ impl ManitcoreVm {
                     self.exit_loop = false;
                 }
                 (
-                    Value::Block(ref block),
+                    Value::Block(BlockType::Literal(ref block)),
                     Value::String(string),
                     Value::Identifier(variable_name),
                 ) => {
@@ -641,7 +651,7 @@ impl ManitcoreVm {
                     self.exit_loop = false;
                 }
                 (
-                    Value::Block(ref block),
+                    Value::Block(BlockType::Literal(ref block)),
                     Value::Bool(condition),
                     Value::Identifier(variable_name),
                 ) => {
@@ -666,7 +676,7 @@ impl ManitcoreVm {
                     self.exit_loop = false;
                 }
                 _ => {
-                    println!("cant make a iterate from these types");
+                    println!("cant make a iterate from these types {} {} {}", block.get_type_as_string(),list.get_value_as_string(),variable.get_value_as_string());
                 }
             }
         }
@@ -906,8 +916,6 @@ impl ManitcoreVm {
     }
 
     fn getch(&mut self) {
-
-
         let getch = Getch::new();
         if let Ok(char) = getch.getch() {
             self.execution_stack.push(Token {
@@ -984,60 +992,163 @@ impl ManitcoreVm {
         }
     }
 
-    // Function calls ( new scope created )
-    fn function_call(&mut self) {
-        if let Some(function) = self.get_tokenifvar() {
-            match function.value {
-                Value::Block(ref block) => {
-                    self.call_stack.push(HashMap::new());
-                    for t in block.iter() {
-                        self.execute_token(t)
-                    }
-                    if let Some(token) = self.get_tokenifvar() {
-                        self.execution_stack.push(token)
-                    }
-                    self.call_stack.pop();
-                }
+    // Handles calling block types
+    // fn block_call(&mut self) {
+    //     if let Some(function) = self.get_tokenifvar() {
+    //         match function.value {
+    //             Value::Block(ref block) => {
+    //                 match block {
+    //                     crate::token::BlockType::Literal(block) => {
+    //                         self.call_stack.push(HashMap::new());
+    //                         for t in block.iter() {
+    //                             self.execute_token(t)
+    //                         }
+    //                         if let Some(token) = self.get_tokenifvar() {
+    //                             self.execution_stack.push(token)
+    //                         }
+    //                         self.call_stack.pop();
+
+    //                     },
+    //                     crate::token::BlockType::Procedure(_) => todo!(),
+    //                     crate::token::BlockType::Struct(_) => todo!(),
+    //                 }
+    //             }
+    //             _ => {
+    //                 println!("Cant call this type")
+    //             }
+    //         }
+    //     }
+    // }
+
+    fn create_proc(&mut self) {
+        if let Some(token) = self.get_tokenifvar() {
+            match token.value {
+                Value::Block(block) => match block {
+                    BlockType::Literal(block) => self.execution_stack.push(Token {
+                        value: Value::Block(BlockType::Procedure(block)),
+                    }),
+                    BlockType::Procedure(block) => self.execution_stack.push(Token {
+                        value: Value::Block(BlockType::Procedure(block)),
+                    }),
+                    BlockType::Struct(block) => todo!(),
+                    BlockType::Lambda(_) => todo!(),
+                },
                 _ => {
-                    println!("Cant call this type")
+                    println!("cant turn this into procedure")
                 }
             }
         }
     }
 
-    fn user_function_call(&mut self, function_name: &str) {
+    fn block_call(&mut self) {
+        if let Some(function) = self.execution_stack.pop() {
+            match function.value {
+                Value::Block(block) => {
+                    match block {
+                        BlockType::Literal(block) => {
+                            // Call with new scope
+                            self.call_stack.push(HashMap::new());
+                            for t in block.iter() {
+                                self.execute_token(t)
+                            }
+                            if let Some(token) = self.get_tokenifvar() {
+                                self.execution_stack.push(token)
+                            }
+                            self.call_stack.pop();
+                        }
+                        BlockType::Procedure(block) => {
+                            // call in same scope                    self.call_stack.push(HashMap::new());
+                            for t in block.iter() {
+                                self.execute_token(t)
+                            }
+                            if let Some(token) = self.get_tokenifvar() {
+                                self.execution_stack.push(token)
+                            }
+                            self.call_stack.pop();
+                            if let Some(token) = self.get_tokenifvar() {
+                                self.execution_stack.push(token)
+                            }
+                        }
+                        BlockType::Struct(_) => todo!(),
+                        BlockType::Lambda(_) => todo!(),
+                    }
+                }
+                _ => {
+                    println!("Cant chain call this type")
+                }
+            }
+        }
+    }
+
+    fn user_block_call(&mut self, function_name: &str) {
         if let Some(token) = self.get_tokenifident(function_name) {
-            if let Value::Block(ref block) = token.value {
-                self.call_stack.push(HashMap::new());
-                for t in block.iter() {
-                    self.execute_token(t)
+            if let Value::Block(block) = token.value {
+                match block {
+                    BlockType::Literal(block) => {
+                        // Call with new scope
+                        self.call_stack.push(HashMap::new());
+                        for t in block.iter() {
+                            self.execute_token(t)
+                        }
+                        if let Some(token) = self.get_tokenifvar() {
+                            self.execution_stack.push(token)
+                        }
+                        self.call_stack.pop();
+                    }
+                    BlockType::Procedure(block) => {
+                        // call in same scope
+                        for t in block.iter() {
+                            self.execute_token(t)
+                        }
+                        if let Some(token) = self.get_tokenifvar() {
+                            self.execution_stack.push(token)
+                        }
+                    }
+                    BlockType::Struct(_) => todo!(),
+                    BlockType::Lambda(_) => todo!(),
                 }
-                if let Some(token) = self.get_tokenifvar() {
-                    self.execution_stack.push(token)
-                }
-                self.call_stack.pop();
             } else {
                 println!("Cant call this type")
             }
         }
     }
 
-    fn user_function_chain_call(&mut self) {
+    fn user_block_chain_call(&mut self) {
         self.execution_stack.reverse();
         if let Some(function) = self.execution_stack.pop() {
             match function.value {
-                Value::Block(ref block) => {
-                    self.call_stack.push(HashMap::new());
-                    for t in block.iter() {
-                        self.execute_token(t)
+                Value::Block(block) => {
+                    match block {
+                        BlockType::Literal(block) => {
+                            // Call with new scope
+                            self.call_stack.push(HashMap::new());
+                            for t in block.iter() {
+                                self.execute_token(t)
+                            }
+                            if let Some(token) = self.get_tokenifvar() {
+                                self.execution_stack.push(token)
+                            }
+                            self.call_stack.pop();
+                        }
+                        BlockType::Procedure(block) => {
+                            // call in same scope                    self.call_stack.push(HashMap::new());
+                            for t in block.iter() {
+                                self.execute_token(t)
+                            }
+                            if let Some(token) = self.get_tokenifvar() {
+                                self.execution_stack.push(token)
+                            }
+                            self.call_stack.pop();
+                            if let Some(token) = self.get_tokenifvar() {
+                                self.execution_stack.push(token)
+                            }
+                        }
+                        BlockType::Struct(_) => todo!(),
+                        BlockType::Lambda(_) => todo!(),
                     }
-                    if let Some(token) = self.get_tokenifvar() {
-                        self.execution_stack.push(token)
-                    }
-                    self.call_stack.pop();
                 }
                 _ => {
-                    println!("Cant call this type")
+                    println!("Cant chain call this type")
                 }
             }
         }
@@ -1045,47 +1156,47 @@ impl ManitcoreVm {
     }
 
     // Macros ( no scope created )
-    fn macro_call(&mut self) {
-        if let Some(function) = self.get_tokenifvar() {
-            match function.value {
-                Value::Block(ref block) => {
-                    for t in block.iter() {
-                        self.execute_token(t)
-                    }
-                }
-                _ => self.execution_stack.push(function),
-            }
-        }
-    }
+    // fn macro_call(&mut self) {
+    //     if let Some(function) = self.get_tokenifvar() {
+    //         match function.value {
+    //             Value::Block(ref block) => {
+    //                 for t in block.iter() {
+    //                     self.execute_token(t)
+    //                 }
+    //             }
+    //             _ => self.execution_stack.push(function),
+    //         }
+    //     }
+    // }
 
-    fn user_macro_call(&mut self, function_name: &str) {
-        if let Some(token) = self.get_tokenifident(function_name) {
-            if let Value::Block(ref block) = token.value {
-                for t in block.iter() {
-                    self.execute_token(t)
-                }
-            } else {
-                println!("Cant macro this type")
-            }
-        }
-    }
+    // fn user_macro_call(&mut self, function_name: &str) {
+    //     if let Some(token) = self.get_tokenifident(function_name) {
+    //         if let Value::Block(ref block) = token.value {
+    //             for t in block.iter() {
+    //                 self.execute_token(t)
+    //             }
+    //         } else {
+    //             println!("Cant macro this type")
+    //         }
+    //     }
+    // }
 
-    fn user_macro_chain_call(&mut self) {
-        self.execution_stack.reverse();
-        if let Some(function) = self.execution_stack.pop() {
-            match function.value {
-                Value::Block(ref block) => {
-                    for t in block.iter() {
-                        self.execute_token(t)
-                    }
-                }
-                _ => {
-                    println!("Cant macro this type")
-                }
-            }
-        }
-        self.execution_stack.reverse();
-    }
+    // fn user_macro_chain_call(&mut self) {
+    //     self.execution_stack.reverse();
+    //     if let Some(function) = self.execution_stack.pop() {
+    //         match function.value {
+    //             Value::Block(ref block) => {
+    //                 for t in block.iter() {
+    //                     self.execute_token(t)
+    //                 }
+    //             }
+    //             _ => {
+    //                 println!("Cant macro this type")
+    //             }
+    //         }
+    //     }
+    //     self.execution_stack.reverse();
+    // }
 
     fn stack_println(&mut self) {
         if let Some(token) = self.get_tokenifvar() {
@@ -1117,17 +1228,13 @@ impl ManitcoreVm {
                 Value::Block(_) => {
                     println!("BLOCK")
                 }
-                Value::UserFunction(function) => {
-                    println!("USER FUNCTION: {}",function)
-                },
-                Value::UserMacro(function) => {
-                    println!("MACRO: {}",function)
-                },
                 Value::List(_) => {
-                    println!("BLOCK")
+                    println!("LIST")
                 }
                 Value::Nothing => todo!(),
-
+                Value::UserBlockCall(_) => {
+                    println!("Block Call")
+                }
             }
         }
     }
@@ -1154,7 +1261,7 @@ impl ManitcoreVm {
                         println!("cant get this index, nothing here")
                     }
                 }
-                (Value::Identifier(identifier), Value::Block(block)) => match identifier.as_str() {
+                (Value::Identifier(identifier), Value::Block(BlockType::Literal(ref block))) => match identifier.as_str() {
                     "len" => self.execution_stack.push(Token {
                         value: Value::Integer(block.len() as i128),
                     }),
@@ -1278,33 +1385,30 @@ impl ManitcoreVm {
                 let delay = time::Duration::from_millis(time as u64);
                 thread::sleep(delay);
             }
-
         }
     }
 
     fn random(&mut self) {
         if let (Some(right), Some(left)) = (self.get_tokenifvar(), self.get_tokenifvar()) {
-            match (left.value,right.value) {
-                (Value::Integer(left),Value::Integer(right)) => {
-
+            match (left.value, right.value) {
+                (Value::Integer(left), Value::Integer(right)) => {
                     if left <= right {
                         let mut rng = rand::thread_rng();
                         self.execution_stack.push(Token {
-                            value: Value::Integer(rng.gen_range(left..=right))
+                            value: Value::Integer(rng.gen_range(left..=right)),
                         })
                     } else {
                         let mut rng = rand::thread_rng();
                         self.execution_stack.push(Token {
-                            value: Value::Integer(rng.gen_range(right..=left))
+                            value: Value::Integer(rng.gen_range(right..=left)),
                         })
                     }
-                },
+                }
                 _ => {
                     println!("cant make random")
                 }
             }
         }
-
     }
 }
 
@@ -1552,7 +1656,6 @@ impl ManitcoreVm {
 //                 )
 //             }
 
-
 //         } else {
 //             print_error(
 //                 format!("not enough arguments for {}", i.value).as_str(),
@@ -1668,7 +1771,7 @@ impl ManitcoreVm {
 //     // // Used to tie more than 1 token at a time from the stack
 
 //     // "?" => {
-//     //     if self.function_call {
+//     //     if self.block_call {
 //     //         self.exit_loop = true;
 //     //     }
 //     // }

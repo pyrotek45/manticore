@@ -1,11 +1,11 @@
-use std::{ops::DerefMut, rc::Rc};
+use std::rc::Rc;
+
+use hashbrown::HashMap;
 
 #[derive(Debug, Clone, Copy, std::cmp::PartialEq)]
 pub enum Functions {
     VariableAssign,
-
     FunctionVariableAssign,
-    MacroVariableAssign,
 
     SelfId,
     Include,
@@ -13,10 +13,9 @@ pub enum Functions {
     AccessCall, // the dot operator
 
     UserFunctionChain,
-    UserMacroChain,
-
-    UserMacroCall,
     UserFunctionCall,
+
+    Proc,
 
     Println,
     Print,
@@ -69,55 +68,26 @@ pub enum Functions {
     Remove,
     Append,
 
+    Return,
+
     Exit,
 }
 
-// fn manticore_functions() -> Vec<String> {
-//     vec![
-//         // basic output
-
-//         // program flow
-
-//         "ret".to_string(),
-
-//         "rev".to_string(),
-//         "shc".to_string(),
-//         "rm".to_string(),
-//         "sec".to_string(),
-//         // string function
-
-//         "loop".to_string(),
-//         "from".to_string(),
-//         // url
-//         "run_url".to_string(),
-//         "store_url".to_string(),
-//         "import_url".to_string(),
-//         // import
-//         "import".to_string(),
-//         "store_import".to_string(),
-//         // os control
-
-//         // random function
-//         "randomf".to_string(),
-//         "random_int".to_string(),
-//         // token
-//         "exist".to_string(),
-//         // list commands
-//         "push".to_string(),
-//         "pop".to_string(),
-//         "insert".to_string(),
-//         "remove".to_string(),
-//         "append".to_string(),
-//     ]
-// }
+#[derive(Debug, Clone, std::cmp::PartialEq)]
+pub enum BlockType {
+    Literal(Rc<Vec<Token>>),
+    Lambda(Rc<Vec<Token>>),
+    Procedure(Rc<Vec<Token>>),
+    Struct(Rc<HashMap<String, Token>>),
+}
 
 #[derive(Debug, Clone, std::cmp::PartialEq)]
 pub enum Value {
     // Functions
-    Identifier(String),
-    Function(Functions),
-    UserFunction(String),
-    UserMacro(String),
+    Identifier(String),    // Variables
+    Function(Functions),   // Built in functions
+    UserBlockCall(String), // Block calls
+
     // Basix Types
     Integer(i128),
     Float(f64),
@@ -125,7 +95,7 @@ pub enum Value {
     Char(char),
     Symbol(char),
     Bool(bool),
-    Block(Rc<Vec<Token>>),
+    Block(BlockType),
     List(Rc<Vec<Token>>),
 
     // Empty
@@ -151,7 +121,8 @@ impl Token {
             Value::Function(Functions::Mul)
             | Value::Function(Functions::Div)
             | Value::Function(Functions::Mod) => 13,
-            Value::Function(Functions::Neg) => 14,
+            Value::Function(Functions::Neg) => 15,
+            Value::Function(Functions::UserFunctionCall) => 14,
 
             _ => 0,
         }
@@ -159,6 +130,7 @@ impl Token {
 
     pub fn is_left_associative(&self) -> bool {
         match self.value {
+            Value::Function(Functions::UserFunctionCall) => false,
             Value::Function(Functions::Neg) => false,
             Value::Function(Functions::Or) => true,
             Value::Function(Functions::And) => true,
@@ -193,7 +165,6 @@ impl Token {
                 Functions::Gtr => "Gtr".to_string(),
                 Functions::Lss => "Lss".to_string(),
                 Functions::AccessCall => "AccessCall".to_string(),
-                Functions::UserMacroCall => "UserMacroCall".to_string(),
                 Functions::Readln => "Readln".to_string(),
                 Functions::Neg => "Neg".to_string(),
                 Functions::Pow => "Pow".to_string(),
@@ -214,8 +185,6 @@ impl Token {
                 Functions::Mul => "Mul".to_string(),
                 Functions::Div => "Div".to_string(),
                 Functions::UserFunctionCall => "UserFunctionCall".to_string(),
-                Functions::UserMacroChain => "UserMacroChain".to_string(),
-                Functions::MacroVariableAssign => "MacroVariableAssign".to_string(),
                 Functions::Continue => "Continue".to_string(),
                 Functions::Push => "Push".to_string(),
                 Functions::Pop => "Pop".to_string(),
@@ -226,18 +195,24 @@ impl Token {
                 Functions::Clear => "Clear".to_string(),
                 Functions::Getch => "Getch".to_string(),
                 Functions::Sleep => "Sleep".to_string(),
+                Functions::Proc => "Proc".to_string(),
+                Functions::Return => "Return".to_string(),
             },
             Value::Integer(v) => v.to_string(),
             Value::Float(v) => v.to_string(),
             Value::String(v) => v.to_string(),
             Value::Symbol(v) => v.to_string(),
             Value::Bool(v) => v.to_string(),
-            Value::Block(_) => "Block".to_string(),
+            Value::Block(block) => match block {
+                BlockType::Literal(_) => "Block Literal".to_string(),
+                BlockType::Lambda(_) => "Block Lambda".to_string(),
+                BlockType::Procedure(_) => "Block Procedure".to_string(),
+                BlockType::Struct(_) => "Block Struct".to_string(),
+            },
             Value::List(_) => "List".to_string(),
             Value::Nothing => "Nothing".to_string(),
             Value::Char(c) => c.to_string(),
-            Value::UserFunction(v) => format!("UserFunction: {}", &v),
-            Value::UserMacro(v) => format!("UserMacro: {}", &v),
+            Value::UserBlockCall(_) => "UserBlockCall".to_string(),
         }
     }
 
@@ -254,8 +229,7 @@ impl Token {
             Value::List(_) => "List".to_string(),
             Value::Char(_) => "char".to_string(),
             Value::Nothing => "Nothing".to_string(),
-            Value::UserFunction(_) => "UserFunction".to_string(),
-            Value::UserMacro(_) => "UserMacro".to_string(),
+            Value::UserBlockCall(_) => "UserBlockCall".to_string(),
         }
     }
 }

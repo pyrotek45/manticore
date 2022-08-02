@@ -4,7 +4,7 @@ use colored::Colorize;
 
 use crate::{
     string_utils::is_string_number,
-    token::{Functions, Token, Value},
+    token::{BlockType, Functions, Token, Value},
 };
 
 pub struct Lexer {
@@ -19,60 +19,6 @@ pub struct Lexer {
     pub block_stack: Vec<Vec<Token>>,
     //function_keywords: Vec<String>,
     is_skip: bool,
-}
-fn manticore_functions() -> Vec<String> {
-    vec![
-        // program flow
-        "if".to_string(),
-        // block control
-        "call".to_string(),
-        //".".to_string(),
-        "ret".to_string(),
-        "let".to_string(),
-        // stack functions
-        "dup".to_string(),
-        "rev".to_string(),
-        "shc".to_string(),
-        "rm".to_string(),
-        "sec".to_string(),
-        // math functions
-        "neg".to_string(),
-        "sqrt".to_string(),
-        "pow".to_string(),
-        "mod".to_string(),
-        "loop".to_string(),
-        "from".to_string(),
-        // url
-        "run_url".to_string(),
-        "store_url".to_string(),
-        "import_url".to_string(),
-        // import
-        "import".to_string(),
-        "store_import".to_string(),
-        // os control
-        "command".to_string(),
-        // vm function
-        "exit".to_string(),
-        // boolean op
-        "and".to_string(),
-        "or".to_string(),
-        "not".to_string(),
-        "gtr".to_string(),
-        "lss".to_string(),
-        // input
-        "readln".to_string(),
-        // random function
-        "randomf".to_string(),
-        "random_int".to_string(),
-        // token
-        "exist".to_string(),
-        // list commands
-        "push".to_string(),
-        "pop".to_string(),
-        "insert".to_string(),
-        "remove".to_string(),
-        "append".to_string(),
-    ]
 }
 
 impl Lexer {
@@ -130,6 +76,12 @@ impl Lexer {
 
     pub fn match_value(&self, value: &str) -> Token {
         match value.to_lowercase().as_ref() {
+            "return" => Token {
+                value: Value::Function(Functions::Return),
+            },
+            "proc" => Token {
+                value: Value::Function(Functions::Proc),
+            },
             "sleep" => Token {
                 value: Value::Function(Functions::Sleep),
             },
@@ -429,7 +381,7 @@ impl Lexer {
 
                 // Symbols
                 '+' | '-' | '*' | '/' | '(' | ')' | '<' | '>' | '`' | '~' | '@' | '%' | '^'
-                | '&' | ',' | '?' | ';' | ':' | '=' | '!' | '$'  => {
+                | '&' | ',' | '?' | ';' | ':' | '=' | '!' | '$' => {
                     if let Some(t) = self.check_token() {
                         if let Some(vec_last) = self.block_stack.last_mut() {
                             vec_last.push(t)
@@ -442,21 +394,21 @@ impl Lexer {
                             '-' => {
                                 if let Some(last) = vec_last.pop() {
                                     match last.value {
-                                        Value::Identifier(_)=> {
+                                        Value::Identifier(_) => {
                                             vec_last.push(last);
                                             vec_last.push(Token {
                                                 value: Value::Function(Functions::Sub),
                                             });
                                             continue;
                                         }
-                                        Value::Integer(_)=> {
+                                        Value::Integer(_) => {
                                             vec_last.push(last);
                                             vec_last.push(Token {
                                                 value: Value::Function(Functions::Sub),
                                             });
                                             continue;
                                         }
-                                        Value::Float(_)=> {
+                                        Value::Float(_) => {
                                             vec_last.push(last);
                                             vec_last.push(Token {
                                                 value: Value::Function(Functions::Sub),
@@ -476,37 +428,44 @@ impl Lexer {
                                     })
                                 }
                             }
-                            ':' => {
-                                if let Some(last) = vec_last.pop() {
-                                    match last.value {
-                                        Value::Symbol(':') => {
+                            '(' => {
+                                if let Some(ref last) = vec_last.pop() {
+                                    match &last.value {
+                                        Value::Identifier(ident) => {
+                                            vec_last.push(Token {
+                                                value: Value::UserBlockCall(ident.clone()),
+                                            });
+                                            vec_last.push(Token {
+                                                value: Value::Symbol(c),
+                                            });
+                                            continue;
+                                        }
+                                        Value::Symbol(')') => {
+                                            vec_last.push(last.clone());
                                             vec_last.push(Token {
                                                 value: Value::Function(
                                                     Functions::UserFunctionChain,
                                                 ),
                                             });
-                                            continue;
-                                        }
-                                        _ => {
-                                            vec_last.push(last);
                                             vec_last.push(Token {
                                                 value: Value::Symbol(c),
-                                            })
+                                            });
+
+                                            continue;
                                         }
-                                    }
-                                }
-                            }
-                            '&' => {
-                                if let Some(last) = vec_last.pop() {
-                                    match last.value {
-                                        Value::Symbol('&') => {
+                                        Value::Block(BlockType::Literal(block)) => {
                                             vec_last.push(Token {
-                                                value: Value::Function(Functions::UserMacroChain),
+                                                value: Value::Block(BlockType::Lambda(
+                                                    block.clone(),
+                                                )),
+                                            });
+                                            vec_last.push(Token {
+                                                value: Value::Symbol(c),
                                             });
                                             continue;
                                         }
                                         _ => {
-                                            vec_last.push(last);
+                                            vec_last.push(last.clone());
                                             vec_last.push(Token {
                                                 value: Value::Symbol(c),
                                             })
@@ -514,7 +473,24 @@ impl Lexer {
                                     }
                                 }
                             }
-
+                            // '&' => {
+                            //     if let Some(last) = vec_last.pop() {
+                            //         match last.value {
+                            //             Value::Symbol('&') => {
+                            //                 vec_last.push(Token {
+                            //                     value: Value::Function(Functions::UserMacroChain),
+                            //                 });
+                            //                 continue;
+                            //             }
+                            //             _ => {
+                            //                 vec_last.push(last);
+                            //                 vec_last.push(Token {
+                            //                     value: Value::Symbol(c),
+                            //                 })
+                            //             }
+                            //         }
+                            //     }
+                            // }
                             '<' => {
                                 if let Some(last) = vec_last.pop() {
                                     match last.value {
@@ -536,6 +512,12 @@ impl Lexer {
                             '>' => {
                                 if let Some(last) = vec_last.pop() {
                                     match last.value {
+                                        // Value::Function(Functions::Neg) => {
+                                        //     vec_last.push(Token {
+                                        //         value: Value::Function(Functions::UserFunctionCall),
+                                        //     });
+                                        //     continue;
+                                        // }
                                         Value::Function(Functions::Gtr) => {
                                             vec_last.push(Token {
                                                 value: Value::Function(Functions::Dup),
@@ -566,18 +548,18 @@ impl Lexer {
                             '+' => vec_last.push(Token {
                                 value: Value::Function(Functions::Add),
                             }),
-                            '@' => vec_last.push(Token {
-                                value: Value::Function(Functions::UserFunctionCall),
-                            }),
-                            '$' => vec_last.push(Token {
-                                value: Value::Function(Functions::UserMacroCall),
-                            }),
+                            // '@' => vec_last.push(Token {
+                            //     value: Value::Function(Functions::UserFunctionCall),
+                            // }),
+                            // '$' => vec_last.push(Token {
+                            //     value: Value::Function(Functions::UserMacroCall),
+                            // }),
                             '~' => vec_last.push(Token {
                                 value: Value::Function(Functions::FunctionVariableAssign),
                             }),
-                            '?' => vec_last.push(Token {
-                                value: Value::Function(Functions::MacroVariableAssign),
-                            }),
+                            // '?' => vec_last.push(Token {
+                            //     value: Value::Function(Functions::MacroVariableAssign),
+                            // }),
                             '=' => {
                                 if let Some(last) = vec_last.pop() {
                                     match last.value {
@@ -648,7 +630,7 @@ impl Lexer {
                     if let Some(list) = self.block_stack.pop() {
                         if let Some(vec_last) = self.block_stack.last_mut() {
                             vec_last.push(Token {
-                                value: Value::Block(Rc::new(list)),
+                                value: Value::Block(BlockType::Literal(Rc::new(list))),
                             });
                         }
                     }
@@ -696,12 +678,6 @@ impl Lexer {
             }
             self.buffer.clear();
         };
-
-        // if let Some(vec_last) = self.block_stack.last_mut() {
-        //     for x in vec_last.iter() {
-        //         println!("[{} -> {}]",x.get_value_as_string().bright_blue(),x.get_type_as_string().bright_purple())
-        //     }
-        // }
     }
 
     // pub fn debug_output(&mut self,depth: usize,block: Rc<Vec<Token>>) {
