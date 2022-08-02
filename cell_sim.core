@@ -1,0 +1,83 @@
+main = {
+
+    # utilities
+    max = {[x y] ~ if (x > y) {x} {y}}
+
+    min = {[x y] ~ if (x < y) {x} {y}}
+
+    clamp = let {[lower val upper] ~ max(lower min(val upper))}
+
+    
+    unit = {[x y symbol] ~
+        self
+    }
+
+    # setup
+    rows = 10
+    coloums = 10
+
+    agents = []
+    for _ range(1 2) {
+        agents = push(agents unit( 
+                random(1 rows) 
+                random(1 coloums) 
+                "S"
+            )
+        )
+    }
+
+    # print to screen
+    row_buffer = ""
+    print_screen = proc {
+        for r range(1 rows) {
+            for c range(1 coloums) {
+            
+                # sets defualt tile
+                do = proc ({row_buffer = row_buffer + "."})
+
+                # checks list and changes tile to their tile if matches
+                for agent agents {
+                    if (agent.x == r and agent.y == c) {
+                        do = proc( include [agent] {row_buffer = row_buffer + agent.symbol})
+                    } 
+                }
+            
+                # places tile
+                do()
+            }
+            println(row_buffer)
+            row_buffer = ""
+        }
+    }
+
+    move_agents = let {[list] ~ 
+        newagents = []
+        for agent list {
+            if (agent.symbol == "S") {
+                newagents = push(newagents unit(  
+                        clamp(1 (agent.x + random(-1 1)) rows) 
+                        clamp(1 (agent.y + random(-1 1)) coloums)
+                        agent.symbol
+                    )  
+                )
+            } {
+                newagents = push(newagents agent)
+            }
+        }
+        newagents
+    }
+
+    game_loop = proc {
+        agents = move_agents(agents)
+    }
+
+    # runs the main game loop
+    for _ true {
+        clear()
+        game_loop()
+        print_screen()
+        sleep(300)
+    }
+}
+
+main()
