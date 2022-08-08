@@ -293,6 +293,7 @@ impl Parser {
                         continue;
                     }
                     Functions::FunctionVariableAssign => self.output_stack.push(token.clone()),
+                    Functions::StoreTemp | Functions::UserFunctionChain => self.output_stack.push(token.clone()),
                     _ => self.operator_stack.push(token.clone()),
                 },
                 Value::Char(_) => self.output_stack.push(token.clone()),

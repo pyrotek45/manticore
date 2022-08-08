@@ -1,0 +1,88 @@
+rows = 15
+coloums = 20
+
+unit = {[x y] ~ self}
+
+
+character = unit(10 10)
+hole = random(3 (rows - 3))
+wall = return coloums
+score = 0
+
+show_screen = proc {
+    println("MANTICORE FLAPPY BIRD! SCORE: " + score)
+    for r range(1 rows) {
+        for c range(1 coloums) {
+
+            do = proc {print(" ")}
+
+            # print flappy bird
+            if (character.x == r and character.y == c) {
+                do = proc {print("@")}
+            } 
+            
+            # print wall but not the hole
+            if (wall == c) {
+                if ((hole == r) or ((hole - 1) == r) or ((hole - 2) == r) or ((hole - 3) == r)) {
+                    do = proc {print(" ")}
+                } {
+                    do = proc {print("#")}
+                    if ((character.y == wall) and !((character.x == hole) or (character.x == hole - 1) or (character.x == hole - 2) or (character.x == hole - 3))) {
+                        println("you died")
+                        enablerawmode(false)
+                        exit()
+                    }
+                }
+            } 
+
+            # make sure flappy bird isnt out of bounds
+            if ((character.x > rows) or (character.x < 0) ) {
+                println("you died")
+                enablerawmode(false)
+                exit()
+            }
+
+            do()
+        }
+        println("")
+    }
+}
+
+game_loop = proc {
+    # move flappy bird
+    character = unit(
+        character.x + 1
+        character.y 
+    )
+
+    # move wall
+    wall = wall - 1
+
+    # reset wall and add a point
+    if (wall < 0) {
+        wall = return coloums
+        score = score + 1
+        hole = random(3 (rows - 3))
+    }
+}
+
+enablerawmode(true)
+
+input = ""
+for _ true {
+    clear()
+    game_loop()
+    show_screen()
+    sleep(50)
+    input = rawread()
+    if (input == "q") {
+        break
+    }
+    if (input == "w") {
+        character = unit(
+            character.x - 3
+            character.y 
+        )
+    }
+    input = ""
+}

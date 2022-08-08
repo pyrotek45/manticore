@@ -1,11 +1,16 @@
 use core::time;
-use getch::Getch;
+use crossterm::cursor::MoveTo;
+use crossterm::event::{self, Event, KeyCode, KeyEvent};
+use crossterm::terminal::ClearType;
+use crossterm::{execute, terminal};
 use hashbrown::HashMap;
 use modulo::Mod;
 use rand::Rng;
+use std::io::{stdout};
 use std::process::Command;
 use std::rc::Rc;
-use std::thread;
+use std::time::Duration;
+use std::{thread};
 use std::{io::Write, vec};
 
 use crate::token::BlockType;
@@ -13,6 +18,14 @@ use crate::{
     string_utils::{is_string_number, trim_newline},
     token::{Functions, Token, Value},
 };
+
+struct CleanUp;
+
+impl Drop for CleanUp {
+    fn drop(&mut self) {
+        terminal::disable_raw_mode().expect("Could not disable raw mode")
+    }
+}
 
 pub struct ManitcoreVm {
     vm_instruction_: Vec<Token>,
@@ -22,6 +35,7 @@ pub struct ManitcoreVm {
     pub debug: bool,
     pub block_call: bool,
     pub core_self: Vec<Token>,
+    pub temp: Option<Token>,
     call_stack: Vec<HashMap<String, Token>>,
 }
 
@@ -36,6 +50,7 @@ impl ManitcoreVm {
             core_self: vec![],
             call_stack: vec![HashMap::new()],
             continue_loop: false,
+            temp: None,
         }
     }
     pub fn get_tokenifvar(&mut self) -> Option<Token> {
@@ -74,6 +89,7 @@ impl ManitcoreVm {
 
     // Proccess each token
     pub fn execute(&mut self) {
+        let _clean_up = CleanUp;
         for i in self.vm_instruction_.clone() {
             self.execute_token(&i);
         }
@@ -167,7 +183,7 @@ impl ManitcoreVm {
                 Functions::Random => self.random(),
                 Functions::Command => self.command(),
                 Functions::Exit => self.exit(),
-                Functions::Recursive => todo!(),
+                Functions::Recursive => self.recursive(),
                 Functions::Dup => self.dup(),
                 Functions::Include => self.include(),
                 Functions::Add => self.stack_add(),
@@ -189,7 +205,9 @@ impl ManitcoreVm {
                 Functions::Sleep => self.sleep(),
                 Functions::Proc => self.create_proc(),
                 Functions::Return => self.return_top(),
-
+                Functions::EnableRawMode => self.enable_raw_mode(),
+                Functions::RawRead => self.raw_read(),
+                Functions::StoreTemp => self.store_temp(),
             },
             Value::Nothing => {
                 todo!()
@@ -197,6 +215,13 @@ impl ManitcoreVm {
             Value::Char(_) => self.execution_stack.push(token.clone()),
             Value::UserBlockCall(function_name) => self.user_block_call(function_name),
         }
+    }
+
+    fn store_temp(&mut self) {
+        if let Some(token) = self.get_tokenifvar() {
+            self.temp = Some(token);
+        }
+
     }
 
     fn return_top(&mut self) {
@@ -289,30 +314,30 @@ impl ManitcoreVm {
         self.execution_stack.pop();
     }
 
-    fn macro_variable_assign(&mut self) {
-        let mut variable_stack: Vec<String> = Vec::with_capacity(10);
-        if let Some(token) = self.get_tokenifvar() {
-            if let Value::List(identifiers) = token.value {
-                for toks in identifiers.iter().rev() {
-                    if let Value::Identifier(ident) = &toks.value {
-                        variable_stack.push(ident.clone())
-                    }
-                }
-            }
-        }
+    // fn macro_variable_assign(&mut self) {
+    //     let mut variable_stack: Vec<String> = Vec::with_capacity(10);
+    //     if let Some(token) = self.get_tokenifvar() {
+    //         if let Value::List(identifiers) = token.value {
+    //             for toks in identifiers.iter().rev() {
+    //                 if let Value::Identifier(ident) = &toks.value {
+    //                     variable_stack.push(ident.clone())
+    //                 }
+    //             }
+    //         }
+    //     }
 
-        // Tie each value into the call_stack using the tokens poped
+    //     // Tie each value into the call_stack using the tokens poped
 
-        if let Some(newscope) = self.call_stack.last_mut() {
-            for values in variable_stack {
-                if let Some(tok) = self.execution_stack.pop() {
-                    if values != "_" {
-                        newscope.insert(values, tok.clone());
-                    }
-                }
-            }
-        }
-    }
+    //     if let Some(newscope) = self.call_stack.last_mut() {
+    //         for values in variable_stack {
+    //             if let Some(tok) = self.execution_stack.pop() {
+    //                 if values != "_" {
+    //                     newscope.insert(values, tok.clone());
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
 
     fn function_variable_assign(&mut self) {
         let mut variable_stack: Vec<String> = Vec::with_capacity(10);
@@ -487,11 +512,25 @@ impl ManitcoreVm {
     fn variable_assign(&mut self) {
         if let (Some(value), Some(ident)) = (self.execution_stack.pop(), self.execution_stack.pop())
         {
-            if let Some(scope) = self.call_stack.last_mut() {
-                if let Value::Identifier(identifier) = ident.value {
-                    if identifier != "_" {
-                        scope.insert(identifier, value);
+            match (&value.value, ident.value) {
+                (Value::Identifier(moved), Value::Identifier(identifier)) => {
+                    if let Some(scope) = self.call_stack.last_mut() {
+                        if identifier != "_" {
+                            if let Some(item) = scope.remove(moved) {
+                                scope.insert(identifier, item);
+                            }
+                        }
                     }
+                }
+                (_, Value::Identifier(identifier)) => {
+                    if let Some(scope) = self.call_stack.last_mut() {
+                        if identifier != "_" {
+                            scope.insert(identifier, value);
+                        }
+                    }
+                }
+                _ => {
+                    println!("Cannot assign these")
                 }
             }
         }
@@ -559,7 +598,11 @@ impl ManitcoreVm {
                     })
                 }
                 _ => {
-                    println!("cant make a range from these types{} {}",start.get_type_as_string(),end.get_type_as_string());
+                    println!(
+                        "cant make a range from these types{} {}",
+                        start.get_type_as_string(),
+                        end.get_type_as_string()
+                    );
                 }
             }
         }
@@ -572,7 +615,11 @@ impl ManitcoreVm {
             self.execution_stack.pop(),
         ) {
             match (block.value.clone(), list.value.clone(), &variable.value) {
-                (Value::Block(BlockType::Literal(ref block)), Value::Block(BlockType::Literal(ref list)), Value::Identifier(variable_name)) => {
+                (
+                    Value::Block(BlockType::Literal(ref block)),
+                    Value::Block(BlockType::Literal(ref list)),
+                    Value::Identifier(variable_name),
+                ) => {
                     'outer: for variable in list.iter() {
                         if variable_name != "_" {
                             if let Some(scope) = self.call_stack.last_mut() {
@@ -595,7 +642,11 @@ impl ManitcoreVm {
                     }
                     self.exit_loop = false;
                 }
-                (Value::Block(BlockType::Literal(ref block)), Value::List(ref list), Value::Identifier(variable_name)) => {
+                (
+                    Value::Block(BlockType::Literal(ref block)),
+                    Value::List(ref list),
+                    Value::Identifier(variable_name),
+                ) => {
                     'outer1: for variable in list.iter() {
                         if variable_name != "_" {
                             if let Some(scope) = self.call_stack.last_mut() {
@@ -676,7 +727,12 @@ impl ManitcoreVm {
                     self.exit_loop = false;
                 }
                 _ => {
-                    println!("cant make a iterate from these types {} {} {}", block.get_type_as_string(),list.get_value_as_string(),variable.get_value_as_string());
+                    println!(
+                        "cant make a iterate from these types {} {} {}",
+                        block.get_type_as_string(),
+                        list.get_value_as_string(),
+                        variable.get_value_as_string()
+                    );
                 }
             }
         }
@@ -912,15 +968,23 @@ impl ManitcoreVm {
     }
 
     fn clearscreen(&mut self) {
-        clearscreen::clear().unwrap();
+        execute!(stdout(), terminal::Clear(ClearType::All)).unwrap();
+        execute!(stdout(), MoveTo(0, 0)).unwrap();
     }
 
     fn getch(&mut self) {
-        let getch = Getch::new();
-        if let Ok(char) = getch.getch() {
-            self.execution_stack.push(Token {
-                value: Value::Integer(char.into()),
-            });
+        if let Event::Key(event) = event::read().expect("Failed to read line") {
+            match event {
+                KeyEvent {
+                    code: KeyCode::Char(character),
+                    modifiers: event::KeyModifiers::NONE,
+                } => self.execution_stack.push(Token {
+                    value: Value::Char(character),
+                }),
+                _ => {
+                    println!("not done yet")
+                }
+            }
         }
     }
 
@@ -1057,16 +1121,9 @@ impl ManitcoreVm {
                             self.call_stack.pop();
                         }
                         BlockType::Procedure(block) => {
-                            // call in same scope                    self.call_stack.push(HashMap::new());
+                            // call in same scope   
                             for t in block.iter() {
                                 self.execute_token(t)
-                            }
-                            if let Some(token) = self.get_tokenifvar() {
-                                self.execution_stack.push(token)
-                            }
-                            self.call_stack.pop();
-                            if let Some(token) = self.get_tokenifvar() {
-                                self.execution_stack.push(token)
                             }
                         }
                         BlockType::Struct(_) => todo!(),
@@ -1100,9 +1157,6 @@ impl ManitcoreVm {
                         for t in block.iter() {
                             self.execute_token(t)
                         }
-                        if let Some(token) = self.get_tokenifvar() {
-                            self.execution_stack.push(token)
-                        }
                     }
                     BlockType::Struct(_) => todo!(),
                     BlockType::Lambda(_) => todo!(),
@@ -1114,9 +1168,8 @@ impl ManitcoreVm {
     }
 
     fn user_block_chain_call(&mut self) {
-        self.execution_stack.reverse();
-        if let Some(function) = self.execution_stack.pop() {
-            match function.value {
+        if let Some(function) = &self.temp {
+            match function.value.clone() {
                 Value::Block(block) => {
                     match block {
                         BlockType::Literal(block) => {
@@ -1131,20 +1184,14 @@ impl ManitcoreVm {
                             self.call_stack.pop();
                         }
                         BlockType::Procedure(block) => {
-                            // call in same scope                    self.call_stack.push(HashMap::new());
+                            // call in same scope                   
                             for t in block.iter() {
                                 self.execute_token(t)
                             }
-                            if let Some(token) = self.get_tokenifvar() {
-                                self.execution_stack.push(token)
-                            }
-                            self.call_stack.pop();
-                            if let Some(token) = self.get_tokenifvar() {
-                                self.execution_stack.push(token)
-                            }
                         }
-                        BlockType::Struct(_) => todo!(),
-                        BlockType::Lambda(_) => todo!(),
+                        _ => {
+                            println!("Cant chain call this type") 
+                        }
                     }
                 }
                 _ => {
@@ -1152,7 +1199,6 @@ impl ManitcoreVm {
                 }
             }
         }
-        self.execution_stack.reverse();
     }
 
     // Macros ( no scope created )
@@ -1198,42 +1244,73 @@ impl ManitcoreVm {
     //     self.execution_stack.reverse();
     // }
 
+    fn raw_read(&mut self) {
+        if event::poll(Duration::from_millis(100)).expect("Error") {
+            if let Event::Key(event) = event::read().expect("Failed to read line") {
+                match event {
+                    KeyEvent {
+                        code: KeyCode::Char(character),
+                        modifiers: event::KeyModifiers::NONE,
+                    } => self.execution_stack.push(Token {
+                        value: Value::Char(character),
+                    }),
+                    _ => {
+                        println!("not done yet")
+                    }
+                }
+            }
+        }
+        /* end */
+    }
+
+    fn enable_raw_mode(&mut self) {
+        if let Some(token) = self.get_tokenifvar() {
+            if let Value::Bool(bool) = token.value {
+                if bool {
+                    terminal::enable_raw_mode().expect("could not enable raw mode");
+                } else {
+                    terminal::disable_raw_mode().expect("Could not disable raw mode")
+                }
+            }
+        }
+    }
+
     fn stack_println(&mut self) {
         if let Some(token) = self.get_tokenifvar() {
             match token.value {
                 Value::Identifier(value) => {
-                    println!("{}", &value)
+                    print!("{}\r\n", &value)
                 }
                 Value::Function(value) => {
-                    println!("{:?}", &value)
+                    print!("{:?}\r\n", &value)
                 }
                 Value::Integer(value) => {
-                    println!("{}", &value)
+                    print!("{}\r\n", &value);
                 }
                 Value::Float(value) => {
-                    println!("{}", &value)
+                    print!("{}\r\n", &value)
                 }
                 Value::String(value) => {
-                    println!("{}", &value)
+                    print!("{}\r\n", &value)
                 }
                 Value::Symbol(value) => {
-                    println!("{}", &value)
+                    print!("{}\r\n", &value)
                 }
                 Value::Bool(value) => {
-                    println!("{}", &value)
+                    print!("{}\r\n", &value)
                 }
                 Value::Char(value) => {
-                    println!("{}", value)
+                    print!("{}\r\n", value)
                 }
                 Value::Block(_) => {
-                    println!("BLOCK")
+                    print!("BLOCK\r\n")
                 }
                 Value::List(_) => {
-                    println!("LIST")
+                    print!("LIST\r\n")
                 }
                 Value::Nothing => todo!(),
                 Value::UserBlockCall(_) => {
-                    println!("Block Call")
+                    print!("Block Call\r\n")
                 }
             }
         }
@@ -1261,26 +1338,28 @@ impl ManitcoreVm {
                         println!("cant get this index, nothing here")
                     }
                 }
-                (Value::Identifier(identifier), Value::Block(BlockType::Literal(ref block))) => match identifier.as_str() {
-                    "len" => self.execution_stack.push(Token {
-                        value: Value::Integer(block.len() as i128),
-                    }),
-                    _ => {
-                        self.call_stack.push(HashMap::new());
+                (Value::Identifier(identifier), Value::Block(BlockType::Literal(ref block))) => {
+                    match identifier.as_str() {
+                        "len" => self.execution_stack.push(Token {
+                            value: Value::Integer(block.len() as i128),
+                        }),
+                        _ => {
+                            self.call_stack.push(HashMap::new());
 
-                        for t in block.iter() {
-                            self.execute_token(t)
-                        }
-
-                        if let Some(scope) = self.call_stack.last_mut() {
-                            if let Some(token) = scope.get(&identifier) {
-                                self.execution_stack.push(token.clone())
+                            for t in block.iter() {
+                                self.execute_token(t)
                             }
-                        }
 
-                        self.call_stack.pop();
+                            if let Some(scope) = self.call_stack.last_mut() {
+                                if let Some(token) = scope.get(&identifier) {
+                                    self.execution_stack.push(token.clone())
+                                }
+                            }
+
+                            self.call_stack.pop();
+                        }
                     }
-                },
+                }
                 _ => {
                     println!("cant access_call these")
                 }

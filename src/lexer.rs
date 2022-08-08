@@ -19,6 +19,7 @@ pub struct Lexer {
     pub block_stack: Vec<Vec<Token>>,
     //function_keywords: Vec<String>,
     is_skip: bool,
+    is_parsing_chain: bool,
 }
 
 impl Lexer {
@@ -37,6 +38,7 @@ impl Lexer {
                 //function_keywords: manticore_functions(),
                 is_parsing_comment: false,
                 is_skip: false,
+                is_parsing_chain: false,
             }
         } else {
             println!(
@@ -61,6 +63,7 @@ impl Lexer {
             //function_keywords: manticore_functions(),
             is_parsing_comment: false,
             is_skip: false,
+            is_parsing_chain: false,
         }
     }
 
@@ -76,6 +79,12 @@ impl Lexer {
 
     pub fn match_value(&self, value: &str) -> Token {
         match value.to_lowercase().as_ref() {
+            "rawread" => Token {
+                value: Value::Function(Functions::RawRead),
+            },
+            "enablerawmode" => Token {
+                value: Value::Function(Functions::EnableRawMode),
+            },
             "return" => Token {
                 value: Value::Function(Functions::Return),
             },
@@ -305,6 +314,15 @@ impl Lexer {
                     continue;
                 } else {
                     self.is_parsing_comment = false;
+                    if let Some(vec_last) = self.block_stack.last_mut() {
+                        if let Some(last) = vec_last.last() {
+                            if Value::Symbol(';') != last.value {
+                                vec_last.push(Token {
+                                    value: Value::Symbol(';'),
+                                })
+                            }
+                        }
+                    }
                     continue;
                 }
             }
@@ -362,12 +380,11 @@ impl Lexer {
                     }
                 }
                 '.' => {
-                    if let Some(vec_last) = self.block_stack.last_mut() {
-                        if is_string_number(&self.buffer) && !(&self.buffer.contains('.')) {
-                            self.buffer.push(c);
-                            continue;
-                        }
+                    if is_string_number(&self.buffer) && !(&self.buffer.contains('.')) {
+                        self.buffer.push(c);
+                        continue;
                     }
+
                     if let Some(t) = self.check_token() {
                         if let Some(vec_last) = self.block_stack.last_mut() {
                             vec_last.push(t);
@@ -391,6 +408,24 @@ impl Lexer {
 
                     if let Some(vec_last) = self.block_stack.last_mut() {
                         match c {
+                            ')' => {
+
+                                if self.is_parsing_chain {
+
+                                    vec_last.push(Token {
+                                        value: Value::Function(
+                                            Functions::UserFunctionChain,
+                                        ),
+                                    });
+                                    self.is_parsing_chain = false;
+
+
+                                }
+
+                                vec_last.push(Token {
+                                    value: Value::Symbol(c),
+                                });
+                            }
                             '-' => {
                                 if let Some(last) = vec_last.pop() {
                                     match last.value {
@@ -442,10 +477,9 @@ impl Lexer {
                                         }
                                         Value::Symbol(')') => {
                                             vec_last.push(last.clone());
+                                            self.is_parsing_chain = true;
                                             vec_last.push(Token {
-                                                value: Value::Function(
-                                                    Functions::UserFunctionChain,
-                                                ),
+                                                value: Value::Function(Functions::StoreTemp),
                                             });
                                             vec_last.push(Token {
                                                 value: Value::Symbol(c),
@@ -471,6 +505,10 @@ impl Lexer {
                                             })
                                         }
                                     }
+                                } else {
+                                    vec_last.push(Token {
+                                        value: Value::Symbol(c),
+                                    })
                                 }
                             }
                             // '&' => {

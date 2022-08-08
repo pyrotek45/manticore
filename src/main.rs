@@ -1,5 +1,5 @@
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 extern crate clap;
 extern crate colored;
 
@@ -16,7 +16,7 @@ use manticorevm::ManitcoreVm;
 use parser::Parser;
 
 use rustyline::error::ReadlineError;
-use rustyline::{Editor, Result};
+use rustyline::Editor;
 
 use rustyline::validate::MatchingBracketValidator;
 use rustyline::{Cmd, EventHandler, KeyCode, KeyEvent, Modifiers};

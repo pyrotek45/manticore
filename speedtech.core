@@ -1,17 +1,16 @@
-sum: = 0;
-num: = 20000;
+sum = 0
+num = 20000
 
 println("started...")
-for i: range(1 num) {
-    for j: range(1 (num: - 1)) {
-        if equ(mod(num: j) 0) {
-            sum: = sum: + j;
-        };
-    };
-    if equ(num: sum) {
-        print('num: ', num: ,'/ sum: ', sum)
-        println("")
-    };
-    sum: = 0;
-    num: = num: - 1;
-};
+for i range(1 num) {
+    for j range(1 (num - 1)) {
+        if (num  % j == 0) {
+            sum = sum + j
+        }
+    }
+    if (num == sum) {
+        println(sum)
+    }
+    sum = 0
+    num = num - 1
+}

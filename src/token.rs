@@ -13,6 +13,7 @@ pub enum Functions {
     AccessCall, // the dot operator
 
     UserFunctionChain,
+    StoreTemp,
     UserFunctionCall,
 
     Proc,
@@ -71,6 +72,11 @@ pub enum Functions {
     Return,
 
     Exit,
+
+    //terminal stuff
+    EnableRawMode,
+    RawRead,
+
 }
 
 #[derive(Debug, Clone, std::cmp::PartialEq)]
@@ -197,6 +203,9 @@ impl Token {
                 Functions::Sleep => "Sleep".to_string(),
                 Functions::Proc => "Proc".to_string(),
                 Functions::Return => "Return".to_string(),
+                Functions::EnableRawMode => "EnableRawMode".to_string(),
+                Functions::RawRead => "RawRead".to_string(),
+                Functions::StoreTemp => "StoreTemp".to_string(),
             },
             Value::Integer(v) => v.to_string(),
             Value::Float(v) => v.to_string(),
